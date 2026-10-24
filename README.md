@@ -6,16 +6,29 @@ An autonomous AI agent that tests web applications: it explores the app, decides
 
 ## Quick Start
 
+**Local, no Docker** (dashboard with its built-in engine, plus the ShopLite target):
+
 ```bash
-# 1. Clone and configure
-cp .env.example .env
-# Edit .env with your LLM API key
+# Dashboard
+cd apps/frontend
+# create .env.local with:
+#   GROQ_API_KEY=gsk_...
+#   NEXT_PUBLIC_API_URL=/api
+#   BACKEND_API_URL=            (empty = use the built-in engine)
+npm ci
+npm run build && npm start         # http://localhost:3000
 
-# 2. Start all services
-docker compose up --build
+# ShopLite target (second terminal)
+cd apps/shoplite
+npm ci
+PORT=3001 BUG_SET=all node src/index.js
+```
 
-# 3. Open the dashboard
-open http://localhost:3000
+**Full stack** (FastAPI backend, Python runner, MongoDB):
+
+```bash
+cp .env.example .env               # add GROQ_API_KEY
+docker compose up --build          # http://localhost:3000
 ```
 
 ## Architecture
@@ -39,19 +52,19 @@ drishti-ai/
     backend/        # FastAPI REST API
     runner/         # Pipeline (S1–S10), browser layer, LLM gateway
     shoplite/       # Benchmark target app with plantable bugs
-  benchmarks/       # Scoring runner, descriptions, results
-  tests/            # System-level tests (unit, integration, security)
-  data/             # gitignored — artifacts, LLM cache
-  demo/             # Fallback recordings, demo script
+  benchmarks/       # Benchmark bug descriptions
+  docs/             # Architecture and research write-up
+  data/             # created at runtime, gitignored — artifacts, LLM cache
 ```
 
 ## AI Tools and Models Used
 
 | Tool / Model       | Purpose                              |
 |--------------------|--------------------------------------|
-| *(fill in)*        | LLM for test planning                |
+| Groq — `openai/gpt-oss-120b` | LLM test planning and scenario generation (runner) |
+| Groq — `openai/gpt-oss-20b`  | Fallback model                       |
 | Playwright         | Browser automation                   |
-| *(fill in)*        | Code assistance during development   |
+| Claude Code (Anthropic) | Code assistance during development |
 
 > Per IM-02 guidelines: all AI tools and models used are listed above.
 
