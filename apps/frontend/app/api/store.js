@@ -134,6 +134,7 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
     let detectedTech = [];
 
     const probeStart = Date.now();
+    let probeError = null;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -158,6 +159,7 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
       }
     } catch (err) {
       latencyMs = Date.now() - probeStart;
+      probeError = err.message;
       console.error("Probe error:", err.message);
     }
 
@@ -275,6 +277,12 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
           }
         }
       });
+    }
+
+    if (probeError) {
+      emitEvent(runId, "S1", "pipeline_error", `Target unreachable: ${probeError}. Start the target app and run again.`);
+      updateRunStage(runId, "S1", "failed");
+      return;
     }
 
     emitEvent(
