@@ -946,7 +946,7 @@ def test_j07_transport_security_and_console(page: Page):
       />
 
       {/* =========================================================================
-          EXECUTIVE QA REPORT — VOSTRIDE LIGHT TABBED ARCHITECTURE
+          EXECUTIVE QA REPORT — TABBED LAYOUT
           ========================================================================= */}
       <div className="space-y-6">
         {/* Sleek Segmented Tab Navigation */}

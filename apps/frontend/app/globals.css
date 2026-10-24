@@ -6,7 +6,7 @@
   --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
-  /* Vostride Light Mode Design Token System */
+  /* DRISHTI light design tokens */
   --bg-canvas: #fafafa;
   --bg-surface: #ffffff;
   --bg-surface-elevated: #f4f4f5;
@@ -17,7 +17,7 @@
   --border-medium: #d4d4d8;
   --border-focus: #09090b;
 
-  /* Vostride Accent & Brand Colors */
+  /* DRISHTI accent and brand colours */
   --accent: #000000;
   --accent-orange: #FF9500;
   --accent-orange-hover: #e08500;
@@ -91,7 +91,7 @@ code, pre, kbd, samp, .font-mono {
   border-radius: 0.75rem;
 }
 
-/* Primary Action Button (Vostride High-Precision Solid Black) */
+/* Primary action button (solid black) */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -126,7 +126,7 @@ code, pre, kbd, samp, .font-mono {
   cursor: not-allowed;
 }
 
-/* Accent Orange Button (Vostride signature #FF9500) */
+/* Accent orange button */
 .btn-accent {
   display: inline-flex;
   align-items: center;
@@ -152,7 +152,7 @@ code, pre, kbd, samp, .font-mono {
   transform: translateY(-0.5px);
 }
 
-/* Secondary Button (Vostride crisp white surface) */
+/* Secondary button (white surface) */
 .btn-secondary {
   display: inline-flex;
   align-items: center;
