@@ -3,21 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ShieldCheck,
-  Lock,
-  Mail,
-  User,
-  Building,
-  Briefcase,
-  ArrowRight,
-  Eye,
-  EyeOff,
-  CheckCircle2,
-  AlertCircle,
-  Sparkles,
-  Zap,
-} from "lucide-react";
+import { Eye, EyeOff, CheckCircle2, AlertCircle } from "lucide-react";
+
+const fieldClass =
+  "w-full px-3 py-2 text-sm rounded-md border border-line bg-white text-fg placeholder-[#A3A3A3] focus:outline-hidden focus:border-fg transition-colors";
+const labelClass = "block text-xs font-medium text-fg mb-1.5";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -101,104 +91,112 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-[#FAFAF9]">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        {/* Brand Badge */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-orange-200 bg-orange-50/80 text-orange-800 text-xs font-semibold mb-4 shadow-2xs">
-          <Sparkles className="w-3.5 h-3.5 text-[#F97316]" />
-          <span>New Engineer Onboarding</span>
-        </div>
+    <div className="min-h-[calc(100vh-3.5rem)] flex flex-col justify-center py-12 px-4 bg-[#FAFAF9]">
+      <div className="mx-auto w-full max-w-sm">
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Create your account</h1>
+        <p className="mt-1.5 text-sm text-muted">Start testing your app with DRISHTI.</p>
 
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#171717]">
-          Create your DRISHTI account
-        </h1>
-        <p className="mt-2 text-xs sm:text-sm text-[#737373] max-w-sm mx-auto">
-          Deploy autonomous QA multi-agent swarms, self-healing locators, and automated Pytest suites.
-        </p>
-      </div>
-
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-        <div className="bg-white py-8 px-6 sm:px-8 border border-[#E5E5E5] rounded-2xl shadow-xs space-y-6">
-          {/* Quick Preload Demo Data banner */}
-          <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-200 bg-[#FAFAF9] text-xs">
-            <div className="flex items-center gap-2 text-zinc-700">
-              <Zap className="w-4 h-4 text-[#F97316]" />
-              <span className="font-medium">Testing as Team Lead?</span>
-            </div>
-            <button
-              type="button"
-              onClick={handlePreloadParas}
-              className="px-2.5 py-1 rounded-lg bg-white border border-[#E5E5E5] hover:border-[#171717] text-[11px] font-semibold text-[#171717] transition-all cursor-pointer shadow-2xs"
-            >
-              Pre-fill Paras Profile
-            </button>
-          </div>
-
-          {/* Feedback Messages */}
+        <div className="mt-6 bg-white p-6 border border-line rounded-lg space-y-4">
           {errorMsg && (
-            <div className="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <div role="alert" className="p-3 rounded-md border border-rose-200 bg-rose-50 text-rose-800 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
               <span>{errorMsg}</span>
             </div>
           )}
-
           {successMsg && (
-            <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div role="status" className="p-3 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
               <span>{successMsg}</span>
             </div>
           )}
 
-          {/* Registration Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-[#171717] mb-1.5">
-                Full Name
+              <label htmlFor="reg-name" className={labelClass}>
+                Full name
+              </label>
+              <input
+                id="reg-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="name"
+                required
+                className={fieldClass}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="reg-email" className={labelClass}>
+                Email
+              </label>
+              <input
+                id="reg-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                autoComplete="email"
+                required
+                className={fieldClass}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="reg-password" className={labelClass}>
+                Password
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#A3A3A3]">
-                  <User className="w-4 h-4" />
-                </div>
                 <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Paras Sanjay Kumbhar"
+                  id="reg-password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                  autoComplete="new-password"
                   required
-                  className="w-full pl-9 pr-3.5 py-2 text-xs font-mono rounded-xl border border-[#E5E5E5] bg-[#FAFAF9] text-[#171717] placeholder-[#A3A3A3] focus:outline-hidden focus:border-[#171717] focus:bg-white transition-colors"
+                  className={`${fieldClass} pr-10`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide passwords" : "Show passwords"}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted hover:text-fg"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#171717] mb-1.5">
-                Work Email Address
+              <label htmlFor="reg-confirm" className={labelClass}>
+                Confirm password
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#A3A3A3]">
-                  <Mail className="w-4 h-4" />
-                </div>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="paras@drishti.ai"
-                  required
-                  className="w-full pl-9 pr-3.5 py-2 text-xs font-mono rounded-xl border border-[#E5E5E5] bg-[#FAFAF9] text-[#171717] placeholder-[#A3A3A3] focus:outline-hidden focus:border-[#171717] focus:bg-white transition-colors"
-                />
-              </div>
+              <input
+                id="reg-confirm"
+                type={showPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+                className={fieldClass}
+              />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-[#171717] mb-1.5">
-                  Role / Specialization
-                </label>
-                <div className="relative">
+            <details className="group">
+              <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden text-xs text-muted hover:text-fg">
+                More about you (optional)
+              </summary>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="reg-role" className={labelClass}>
+                    Role
+                  </label>
                   <select
+                    id="reg-role"
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
-                    className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-[#E5E5E5] bg-[#FAFAF9] text-[#171717] focus:outline-hidden focus:border-[#171717] focus:bg-white transition-colors cursor-pointer"
+                    className={`${fieldClass} text-xs`}
                   >
                     <option value="Staff QA Architect / Team Lead">Team Lead</option>
                     <option value="Senior QA Automation Engineer">QA Engineer</option>
@@ -207,100 +205,44 @@ export default function RegisterPage() {
                     <option value="Engineering Manager">Manager</option>
                   </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#171717] mb-1.5">
-                  Organization / Team
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#A3A3A3]">
-                    <Building className="w-4 h-4" />
-                  </div>
+                <div>
+                  <label htmlFor="reg-org" className={labelClass}>
+                    Organization
+                  </label>
                   <input
+                    id="reg-org"
                     type="text"
                     value={organization}
                     onChange={(e) => setOrganization(e.target.value)}
-                    placeholder="Team Refactor"
-                    className="w-full pl-9 pr-3.5 py-2 text-xs font-mono rounded-xl border border-[#E5E5E5] bg-[#FAFAF9] text-[#171717] placeholder-[#A3A3A3] focus:outline-hidden focus:border-[#171717] focus:bg-white transition-colors"
+                    autoComplete="organization"
+                    className={`${fieldClass} text-xs`}
                   />
                 </div>
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#171717] mb-1.5">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#A3A3A3]">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  required
-                  className="w-full pl-9 pr-10 py-2 text-xs font-mono rounded-xl border border-[#E5E5E5] bg-[#FAFAF9] text-[#171717] placeholder-[#A3A3A3] focus:outline-hidden focus:border-[#171717] focus:bg-white transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#A3A3A3] hover:text-[#171717] transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#171717] mb-1.5">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#A3A3A3]">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Repeat your password"
-                  required
-                  className="w-full pl-9 pr-3.5 py-2 text-xs font-mono rounded-xl border border-[#E5E5E5] bg-[#FAFAF9] text-[#171717] placeholder-[#A3A3A3] focus:outline-hidden focus:border-[#171717] focus:bg-white transition-colors"
-                />
-              </div>
-            </div>
+            </details>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#171717] hover:bg-black text-white text-xs font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50 mt-2"
+              className="w-full px-4 py-2.5 rounded-md bg-fg hover:bg-black text-white text-sm font-medium transition-colors disabled:opacity-50"
             >
-              <span>{loading ? "Registering Profile..." : "Create Account & Launch QA"}</span>
-              <ArrowRight className="w-3.5 h-3.5 text-[#F97316]" />
+              {loading ? "Creating account..." : "Create account"}
             </button>
           </form>
 
-          {/* Security & Transport Footer Badge */}
-          <div className="pt-2 border-t border-[#F5F5F4] flex items-center justify-between text-[11px] text-[#A3A3A3] font-mono">
-            <span className="flex items-center gap-1.5 text-emerald-600">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Session Encrypted</span>
-            </span>
-            <span>Local Storage Sandboxed</span>
-          </div>
+          <button
+            type="button"
+            onClick={handlePreloadParas}
+            className="w-full text-center text-xs text-muted hover:text-fg hover:underline"
+          >
+            Fill in the demo profile (Paras)
+          </button>
         </div>
 
-        {/* Bottom Login Link */}
-        <p className="mt-6 text-center text-xs text-[#737373]">
+        <p className="mt-5 text-center text-xs text-muted">
           Already have an account?{" "}
-          <Link
-            href="/login"
-            className="font-semibold text-[#171717] hover:text-[#F97316] underline underline-offset-4 transition-colors"
-          >
-            Sign in here
+          <Link href="/login" className="text-fg underline underline-offset-4 hover:text-black">
+            Sign in
           </Link>
         </p>
       </div>

@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import {
-  ShieldCheck,
-  CheckCircle2,
-  ArrowRight,
-  RotateCcw,
-  Layers,
-  Activity,
-  FileCheck2,
-  Bug,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
+
+function StatCard({ label, value, note }) {
+  return (
+    <div className="rounded-lg border border-line bg-white p-4">
+      <div className="text-xs text-muted">{label}</div>
+      <div className="mt-1 font-mono text-3xl font-medium tabular-nums tracking-tight text-fg">{value}</div>
+      <div className="mt-0.5 text-[11px] text-muted">{note}</div>
+    </div>
+  );
+}
 
 const BENCHMARK_BUGS = [
   {
@@ -105,97 +106,65 @@ const BENCHMARK_BUGS = [
 
 export default function BenchmarksPage() {
   return (
-    <div className="mx-auto max-w-7xl px-6 py-10 w-full flex-1 bg-[#fafafa]">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 w-full flex-1 bg-[#FAFAF9] space-y-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-mono text-xs font-semibold text-emerald-700 mb-2">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            <span>Ground-Truth Evaluation Framework</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900">
-            Benchmark Scorecard &mdash; ShopLite
-          </h1>
-          <p className="text-xs text-zinc-500 mt-1">
-            Standardized evaluation framework per Section 16 of the Technical Architecture.
+          <h1 className="text-2xl font-semibold tracking-tight text-fg">Benchmark: ShopLite</h1>
+          <p className="text-sm text-muted mt-1">
+            A demo shop with 8 planted bugs, used to measure what DRISHTI finds.
           </p>
         </div>
-
         <Link
-          href="/"
-          className="btn-primary flex items-center gap-2 px-5 py-2.5 text-xs font-semibold"
+          href="/#operation-workspace"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-fg text-white hover:bg-black transition-colors text-sm font-medium"
         >
-          <span>Run Benchmark Against Target</span>
-          <ArrowRight className="h-3.5 w-3.5" />
+          Run a benchmark
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
         </Link>
       </div>
 
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="rounded-xl border border-[#e4e4e7] bg-white p-5 shadow-xs">
-          <div className="text-xs font-medium text-zinc-500">Stage 2 Recall (B1–B4)</div>
-          <div className="mt-2 font-mono text-3xl font-bold text-emerald-600">100%</div>
-          <div className="mt-1 text-[11px] text-zinc-400">4 of 4 planted defects detected</div>
-        </div>
-
-        <div className="rounded-xl border border-[#e4e4e7] bg-white p-5 shadow-xs">
-          <div className="text-xs font-medium text-zinc-500">Report Precision</div>
-          <div className="mt-2 font-mono text-3xl font-bold text-emerald-600">100%</div>
-          <div className="mt-1 text-[11px] text-zinc-400">0 false positives on control build</div>
-        </div>
-
-        <div className="rounded-xl border border-[#e4e4e7] bg-white p-5 shadow-xs">
-          <div className="text-xs font-medium text-zinc-500">3&times; Replay Reproducibility</div>
-          <div className="mt-2 font-mono text-3xl font-bold text-[#FF9500]">100%</div>
-          <div className="mt-1 text-[11px] text-zinc-400">3/3 replay consistency on fresh contexts</div>
-        </div>
-
-        <div className="rounded-xl border border-[#e4e4e7] bg-white p-5 shadow-xs">
-          <div className="text-xs font-medium text-zinc-500">Safety Policy Violations</div>
-          <div className="mt-2 font-mono text-3xl font-bold text-zinc-900">0</div>
-          <div className="mt-1 text-[11px] text-emerald-600">Class D actions strictly contained</div>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="Recall (B1–B4)" value="100%" note="4 of 4 planted defects detected" />
+        <StatCard label="Precision" value="100%" note="0 false positives on the clean build" />
+        <StatCard label="Replay reproducibility" value="100%" note="3/3 in fresh contexts" />
+        <StatCard label="Safety violations" value="0" note="Destructive actions contained" />
       </div>
 
-      {/* Ground Truth Planted Defects Table */}
-      <div className="rounded-2xl border border-[#e4e4e7] bg-white p-6 shadow-xs">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-zinc-900 flex items-center gap-2">
-            <FileCheck2 className="h-4 w-4 text-[#FF9500]" />
-            <span>Planted Defects Manifest (bugs.manifest.json)</span>
+      <section aria-labelledby="planted-heading" className="space-y-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="planted-heading" className="text-base font-semibold text-fg">
+            Planted bugs
           </h2>
-          <span className="font-mono text-xs text-zinc-400">8 Ground-Truth Scenarios</span>
+          <span className="font-mono text-xs text-muted">bugs.manifest.json · {BENCHMARK_BUGS.length}</span>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border border-line bg-white">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-[#e4e4e7] text-zinc-400 font-medium">
-                <th className="py-3 px-3">ID</th>
-                <th className="py-3 px-3">Journey</th>
-                <th className="py-3 px-3">Category</th>
-                <th className="py-3 px-3">Expected Behavior</th>
-                <th className="py-3 px-3">Faulty Symptom</th>
-                <th className="py-3 px-3">Verification Signal</th>
-                <th className="py-3 px-3">Status</th>
+              <tr className="border-b border-line bg-subtle text-muted">
+                <th scope="col" className="py-2.5 px-4 font-medium">ID</th>
+                <th scope="col" className="py-2.5 px-4 font-medium">Bug</th>
+                <th scope="col" className="py-2.5 px-4 font-medium hidden md:table-cell">Journey</th>
+                <th scope="col" className="py-2.5 px-4 font-medium hidden lg:table-cell">Detected via</th>
+                <th scope="col" className="py-2.5 px-4 font-medium">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#e4e4e7]">
+            <tbody className="divide-y divide-line">
               {BENCHMARK_BUGS.map((b) => (
-                <tr key={b.id} className="hover:bg-zinc-50/60 transition-colors">
-                  <td className="py-3.5 px-3 font-mono font-bold text-black">{b.id}</td>
-                  <td className="py-3.5 px-3 font-medium text-zinc-900">{b.journey}</td>
-                  <td className="py-3.5 px-3">
-                    <span className="rounded bg-zinc-100 border border-zinc-200 px-2 py-0.5 font-mono text-[10px] text-zinc-700">
-                      {b.type}
-                    </span>
+                <tr key={b.id} className="align-top">
+                  <td className="py-3 px-4 font-mono text-muted">{b.id}</td>
+                  <td className="py-3 px-4 max-w-md">
+                    <div className="text-fg">{b.faulty}</div>
+                    <div className="mt-0.5 text-[11px] text-muted">
+                      Expected: {b.expected} · <span className="font-mono">{b.type}</span>
+                    </div>
                   </td>
-                  <td className="py-3.5 px-3 text-zinc-600 max-w-xs">{b.expected}</td>
-                  <td className="py-3.5 px-3 text-red-600 font-medium max-w-xs">{b.faulty}</td>
-                  <td className="py-3.5 px-3 font-mono text-[11px] text-zinc-500">{b.detected_via}</td>
-                  <td className="py-3.5 px-3">
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-mono text-[10px] font-bold text-emerald-700 tracking-wider">
-                      <CheckCircle2 className="h-3 w-3" />
-                      {b.status}
+                  <td className="py-3 px-4 text-[#525252] hidden md:table-cell whitespace-nowrap">{b.journey}</td>
+                  <td className="py-3 px-4 font-mono text-[11px] text-muted hidden lg:table-cell">{b.detected_via}</td>
+                  <td className="py-3 px-4 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1.5 text-emerald-700">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                      {b.status === "DETECTED & CONFIRMED" ? "Detected" : b.status}
                     </span>
                   </td>
                 </tr>
@@ -203,7 +172,7 @@ export default function BenchmarksPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
