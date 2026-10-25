@@ -1,64 +1,125 @@
 "use client";
 
-import { FileCode2, Copy, Check, Download, Terminal } from "lucide-react";
+import { Copy, Check, Download } from "lucide-react";
+
+const STATUS = {
+  passed: { dot: "bg-emerald-500", text: "text-emerald-700", label: "Passed" },
+  failed: { dot: "bg-red-500", text: "text-red-700", label: "Failed" },
+  warning: { dot: "bg-amber-500", text: "text-amber-700", label: "Warning" },
+  skipped: { dot: "bg-[#D4D4D4]", text: "text-muted", label: "Unavailable" },
+};
 
 export default function PytestTab({
+  tests = [],
   computedPlaywrightCode,
   targetHostname,
   copiedCode,
   copyToClipboard,
   downloadTestSuite,
 }) {
+  const fileName = `test_${targetHostname.replace(/[^a-zA-Z0-9]/g, "_")}.py`;
+  const counts = tests.reduce((acc, t) => ({ ...acc, [t.status]: (acc[t.status] || 0) + 1 }), {});
+
   return (
-    <div className="rounded-xl border border-[#E5E5E5] bg-white p-6 sm:p-7 space-y-5 shadow-xs">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#F5F5F4]">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <h2 className="text-base sm:text-lg font-semibold text-[#171717] flex items-center gap-2">
-            <FileCode2 className="w-4 h-4 text-[#F97316]" />
-            <span>Standalone Pytest-Playwright Test Suite</span>
-          </h2>
-          <p className="text-xs text-[#737373] mt-1">
-            Self-contained executable Python test artifact generated with real target locators
+          <h2 className="text-base font-semibold text-fg">Tests</h2>
+          <p className="text-xs text-muted mt-1">
+            {tests.length
+              ? `${tests.length} named tests: ${counts.passed || 0} passed, ${counts.failed || 0} failed, ${counts.skipped || 0} unavailable${counts.warning ? `, ${counts.warning} warning` : ""}.`
+              : "Tests appear here as the run progresses."}{" "}
+            Each one is exported to a Playwright test you can rerun with pytest.
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => copyToClipboard(computedPlaywrightCode, "code")}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#E5E5E5] text-xs font-medium text-[#171717] hover:bg-[#F5F5F4] transition-colors shadow-2xs cursor-pointer"
-          >
-            {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copiedCode ? "Copied" : "Copy Code"}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={downloadTestSuite}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#171717] text-white hover:bg-black transition-colors text-xs font-semibold shadow-xs cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-[#F97316]" />
-            <span>Download .py</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={downloadTestSuite}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line bg-white text-xs font-medium text-fg hover:bg-subtle transition-colors"
+        >
+          <Download className="w-3.5 h-3.5 text-muted" aria-hidden="true" />
+          <span>Download {fileName}</span>
+        </button>
       </div>
 
-      {/* Code container */}
-      <div className="max-h-[500px] overflow-y-auto rounded-xl border border-[#27272A] bg-[#0E1015] p-4 sm:p-5 font-mono text-xs text-zinc-200 leading-relaxed shadow-inner">
-        <pre className="whitespace-pre-wrap">{computedPlaywrightCode}</pre>
-      </div>
+      {tests.length > 0 && (
+        <ul className="divide-y divide-line rounded-lg border border-line bg-white">
+          {tests.map((t) => {
+            const st = STATUS[t.status] || STATUS.passed;
+            return (
+              <li key={t.id}>
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm [&::-webkit-details-marker]:hidden hover:bg-subtle">
+                    <span className={`inline-flex w-24 shrink-0 items-center gap-1.5 text-xs ${st.text}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} aria-hidden="true" />
+                      {st.label}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-fg">{t.name}</span>
+                    <span className="hidden sm:inline font-mono text-[11px] text-muted">{t.id}</span>
+                  </summary>
+                  <div className="space-y-3 border-t border-line bg-[#FAFAF9] px-4 py-3 text-xs">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted">
+                      <span>Page <span className="font-mono text-fg">{t.route || "/"}</span></span>
+                      <span>Area <span className="text-fg">{t.category}</span></span>
+                      {t.replay && <span>Reproduced <span className="font-mono text-fg">{t.replay}</span></span>}
+                      {t.note && <span>{t.note}</span>}
+                    </div>
+                    {t.steps?.length > 0 && (
+                      <ol className="list-decimal space-y-0.5 pl-4 text-[#525252]">
+                        {t.steps.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ol>
+                    )}
+                    {t.code && (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(t.code, `test-${t.id}`)}
+                          className="absolute right-2 top-2 rounded-md border border-[#3F3F46] bg-[#18181B] p-1.5 text-zinc-300 hover:text-white"
+                          title="Copy this test"
+                          aria-label={`Copy ${t.id}`}
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <pre className="overflow-x-auto rounded-md border border-[#27272A] bg-[#0E1015] p-3 font-mono text-[11px] leading-relaxed text-zinc-200">
+                          {t.code}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
-      {/* Terminal Run Instructions */}
-      <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAF9] p-4 font-mono text-xs text-[#171717] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div className="flex items-center gap-2 truncate">
-          <span className="text-[#A3A3A3] select-none">$</span>
-          <span className="font-semibold truncate">
-            pytest -v test_{targetHostname.replace(/[^a-zA-Z0-9]/g, "_")}.py --headed
-          </span>
+      <details className="rounded-lg border border-line bg-white">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs text-muted hover:text-fg [&::-webkit-details-marker]:hidden">
+          <span>Full file · <span className="font-mono">{fileName}</span></span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              copyToClipboard(computedPlaywrightCode, "code");
+            }}
+            className="inline-flex items-center gap-1.5 text-fg hover:underline"
+          >
+            {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> : <Copy className="w-3.5 h-3.5" aria-hidden="true" />}
+            {copiedCode ? "Copied" : "Copy"}
+          </button>
+        </summary>
+        <div className="max-h-[420px] overflow-y-auto border-t border-[#27272A] bg-[#0E1015] p-4 font-mono text-xs text-zinc-200 leading-relaxed">
+          <pre className="whitespace-pre-wrap">{computedPlaywrightCode}</pre>
         </div>
-        <span className="text-[10px] text-[#737373] font-bold uppercase shrink-0">
-          Run Locally
-        </span>
+      </details>
+
+      <div className="rounded-lg border border-line bg-white px-4 py-3 text-xs">
+        <span className="block text-[11px] text-muted mb-1">Run it locally (needs the playwright and pytest-playwright packages)</span>
+        <code className="font-mono text-fg break-all">
+          <span className="text-muted select-none">$ </span>pytest -v {fileName} --browser-channel chrome
+        </code>
       </div>
     </div>
   );
