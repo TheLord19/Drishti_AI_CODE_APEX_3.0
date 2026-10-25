@@ -1,10 +1,20 @@
 @import "tailwindcss";
 
+/* Design tokens: use as text-fg, text-muted, border-line, bg-subtle, text-accent, etc. */
+@theme inline {
+  --color-fg: #171717;
+  --color-muted: #737373;
+  --color-line: #E5E5E5;
+  --color-subtle: #F5F5F4;
+  --color-page: #FFFFFF;
+  --color-accent: #F97316;
+}
+
 :root {
-  /* User-Defined Exact Font Families */
-  --font-heading: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  /* Geist Sans for UI, Geist Mono for numbers, IDs, URLs and code (loaded in layout.js) */
+  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-body: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 
   /* DRISHTI light design tokens */
   --bg-canvas: #fafafa;
@@ -75,20 +85,18 @@ code, pre, kbd, samp, .font-mono {
 .surface-card {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 0.75rem;
-  box-shadow: var(--shadow-subtle);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 0.5rem;
+  transition: border-color 0.15s ease;
 }
 
 .surface-card-hover:hover {
   border-color: var(--border-medium);
-  box-shadow: var(--shadow-medium);
 }
 
 .surface-elevated {
   background-color: var(--bg-surface-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 0.75rem;
+  border-radius: 0.5rem;
 }
 
 /* Primary action button (solid black) */
@@ -106,19 +114,12 @@ code, pre, kbd, samp, .font-mono {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   border: 1px solid #000000;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.15s ease;
   cursor: pointer;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: #18181b;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transform: translateY(-0.5px);
-}
-
-.btn-primary:active:not(:disabled) {
-  transform: translateY(0);
+  background-color: #262626;
 }
 
 .btn-primary:disabled {
@@ -141,15 +142,12 @@ code, pre, kbd, samp, .font-mono {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   border: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: 0 1px 3px rgba(255, 149, 0, 0.3);
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.15s ease;
   cursor: pointer;
 }
 
 .btn-accent:hover:not(:disabled) {
   background-color: var(--accent-orange-hover);
-  box-shadow: 0 4px 12px rgba(255, 149, 0, 0.35);
-  transform: translateY(-0.5px);
 }
 
 /* Secondary button (white surface) */
@@ -166,7 +164,6 @@ code, pre, kbd, samp, .font-mono {
   padding: 0.5rem 0.875rem;
   border-radius: 0.5rem;
   border: 1px solid var(--border-subtle);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   transition: all 0.15s ease;
   cursor: pointer;
 }
