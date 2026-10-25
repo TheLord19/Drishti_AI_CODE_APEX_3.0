@@ -1,16 +1,41 @@
 "use client";
 
-import {
-  Eye,
-  Monitor,
-  Tablet,
-  Smartphone,
-  RotateCcw,
-  Lock,
-  Maximize2,
-  Copy,
-  Check,
-} from "lucide-react";
+import { Home, Maximize2, Copy, Check } from "lucide-react";
+
+const VIEWPORTS = [
+  { id: "desktop", label: "Desktop" },
+  { id: "tablet", label: "Tablet" },
+  { id: "mobile", label: "Mobile" },
+];
+
+const PADMORA_ROUTES = [
+  { label: "/", route: "/" },
+  { label: "/collections/mohar", route: "/collections/mohar" },
+  { label: "/collections/all", route: "/collections/all" },
+  { label: "/#weaves", route: "/#weaves" },
+  { label: "/#motion", route: "/#motion" },
+];
+
+const FALLBACK_ROUTES = [
+  { label: "/", route: "/" },
+  { label: "/auth/signup", route: "/auth/signup" },
+  { label: "/auth/signin", route: "/auth/signin" },
+  { label: "/budget", route: "/budget" },
+  { label: "/track", route: "/track" },
+];
+
+// Pinned screenshot overlay used by the stored-screenshot previews.
+function ScreenshotBadge({ label, onExpand }) {
+  return (
+    <div className="sticky top-3 self-end mr-3 mb-[-34px] z-10 flex items-center gap-2 rounded-md border border-line bg-white/95 px-2.5 py-1 font-mono text-[10px] text-muted">
+      <span>{label}</span>
+      <button type="button" onClick={onExpand} className="text-muted hover:text-fg" title="Open full page">
+        <Maximize2 className="w-3 h-3" aria-hidden="true" />
+        <span className="sr-only">Open full page</span>
+      </button>
+    </div>
+  );
+}
 
 export default function LiveBrowserTab({
   viewportMode,
@@ -27,268 +52,187 @@ export default function LiveBrowserTab({
   copyToClipboard,
   setFullImageModal,
 }) {
+  const isPadmora = targetUrl?.toLowerCase().includes("padmora");
+  const routeList = isPadmora
+    ? PADMORA_ROUTES
+    : model?.routes?.length
+    ? model.routes.slice(0, 8).map((r) => ({ label: r, route: r }))
+    : FALLBACK_ROUTES;
+  const base = (targetUrl || "").replace(/\/$/, "");
+  const fullPreviewUrl = base + (previewRoute.startsWith("/") ? previewRoute : "/" + previewRoute);
+
+  const buttonList =
+    model?.buttons && model.buttons.length > 0
+      ? model.buttons
+      : isPadmora
+      ? ["EXPLORE MOHAR", "Shop by Weave", "Maheshwari", "Banarasi", "VIEW ALL SAREES", "FIND MY SAREE"]
+      : [];
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-      {/* Live Preview Column (8 Cols) */}
-      <div className="rounded-xl border border-[#E5E5E5] bg-white p-5 space-y-4 shadow-xs lg:col-span-8">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[#F5F5F4]">
-          <div className="flex items-center gap-2">
-            <Eye className="w-4 h-4 text-[#F97316]" />
-            <h3 className="text-sm font-semibold text-[#171717]">
-              Live Target Web Preview
-            </h3>
-          </div>
-
-          {/* Viewport switcher */}
-          <div className="flex items-center gap-1 rounded-lg border border-[#E5E5E5] bg-[#FAFAF9] p-1 text-xs">
-            <button
-              type="button"
-              onClick={() => setViewportMode("desktop")}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors cursor-pointer ${
-                viewportMode === "desktop"
-                  ? "bg-[#171717] text-white font-medium shadow-2xs"
-                  : "text-[#737373] hover:text-[#171717]"
-              }`}
-            >
-              <Monitor className="w-3.5 h-3.5" />
-              <span>Desktop</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewportMode("tablet")}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors cursor-pointer ${
-                viewportMode === "tablet"
-                  ? "bg-[#171717] text-white font-medium shadow-2xs"
-                  : "text-[#737373] hover:text-[#171717]"
-              }`}
-            >
-              <Tablet className="w-3.5 h-3.5" />
-              <span>Tablet</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewportMode("mobile")}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors cursor-pointer ${
-                viewportMode === "mobile"
-                  ? "bg-[#171717] text-white font-medium shadow-2xs"
-                  : "text-[#737373] hover:text-[#171717]"
-              }`}
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Mobile</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Interactive Address Bar & Quick Nav */}
-        <div className="flex flex-col gap-2 rounded-xl border border-[#E5E5E5] bg-[#FAFAF9] p-2.5">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleNavigatePreview("/")}
-              title="Navigate to Home"
-              className="p-1 rounded hover:bg-[#E5E5E5] text-[#737373] hover:text-[#171717] transition-colors cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Active URL Address Bar */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (previewUrlInput) handleNavigatePreview(previewUrlInput);
-              }}
-              className="flex-1 flex items-center gap-2 rounded-lg border border-[#E5E5E5] bg-white px-3 py-1.5 text-xs font-mono shadow-2xs"
-            >
-              <Lock className="w-3 h-3 text-emerald-600 shrink-0" />
-              <span className="text-[#A3A3A3] shrink-0">
-                {targetUrl.replace(/\/$/, "")}
-              </span>
-              <input
-                type="text"
-                value={previewUrlInput !== "" ? previewUrlInput : previewRoute}
-                onChange={(e) => setPreviewUrlInput(e.target.value)}
-                placeholder={previewRoute}
-                className="w-full bg-transparent text-[#171717] outline-none placeholder:text-[#A3A3A3] font-mono text-xs font-medium"
-              />
-              <button
-                type="submit"
-                className="px-2 py-0.5 rounded bg-[#171717] hover:bg-black text-white font-sans text-[10px] font-semibold cursor-pointer shrink-0 transition-colors"
-              >
-                Navigate
-              </button>
-            </form>
-          </div>
-
-          {/* Quick Route Nav Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 pt-1 text-[11px] font-sans">
-            <span className="text-[10px] uppercase font-bold text-[#A3A3A3] shrink-0 mr-1 font-mono">
-              Routes:
-            </span>
-            {(targetUrl?.toLowerCase().includes("padmora")
-              ? [
-                  { label: "Storefront (/)", route: "/" },
-                  { label: "Mohar Collection", route: "/collections/mohar" },
-                  { label: "All Sarees", route: "/collections/all" },
-                  { label: "Shop by Weave", route: "/#weaves" },
-                  { label: "Sarees in Motion", route: "/#motion" },
-                ]
-              : [
-                  { label: "Home (/)", route: "/" },
-                  { label: "Sign-Up (/auth/signup)", route: "/auth/signup" },
-                  { label: "Sign-In (/auth/signin)", route: "/auth/signin" },
-                  { label: "Budget View", route: "/budget" },
-                  { label: "Track View", route: "/track" },
-                ]
-            ).map((tab, idx) => {
-              const isActive =
-                previewRoute === tab.route ||
-                (tab.route !== "/" && previewRoute.includes(tab.route.replace(/^\//, "")));
+      {/* Live preview */}
+      <section className="rounded-lg border border-line bg-white p-4 sm:p-5 space-y-3 lg:col-span-8" aria-labelledby="preview-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 id="preview-heading" className="text-sm font-semibold text-fg">
+            Live preview
+          </h3>
+          <div role="radiogroup" aria-label="Viewport" className="flex items-center rounded-md border border-line bg-subtle p-0.5 text-xs">
+            {VIEWPORTS.map((v) => {
+              const selected = viewportMode === v.id;
               return (
                 <button
-                  key={idx}
+                  key={v.id}
                   type="button"
-                  onClick={() => {
-                    setPreviewUrlInput(tab.route);
-                    handleNavigatePreview(tab.route);
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
-                    isActive
-                      ? "bg-[#171717] text-white shadow-2xs border border-[#171717] font-semibold"
-                      : "bg-white text-[#525252] hover:text-[#171717] hover:bg-[#F5F5F4] border border-[#E5E5E5]"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setViewportMode(v.id)}
+                  className={`rounded px-2.5 py-1 transition-colors ${
+                    selected ? "bg-white text-fg font-medium border border-line" : "text-muted hover:text-fg border border-transparent"
                   }`}
                 >
-                  <span>{tab.label}</span>
+                  {v.label}
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Embedded Live Browser Frame */}
-        <div className="overflow-hidden rounded-xl border border-[#E5E5E5] bg-white shadow-xs">
-          <div className="flex h-8 items-center justify-between bg-[#FAFAF9] border-b border-[#E5E5E5] px-3 font-mono text-[11px] text-[#737373]">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#FF5F56]"></span>
-              <span className="w-2 h-2 rounded-full bg-[#FFBD2E]"></span>
-              <span className="w-2 h-2 rounded-full bg-[#27C93F]"></span>
-              <span className="ml-2 truncate max-w-[340px] text-[#525252] font-medium">
-                {targetUrl.replace(/\/$/, "")}
-                {previewRoute.startsWith("/") ? previewRoute : "/" + previewRoute}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {isNavigatingPreview && (
-                <span className="text-[#F97316] font-mono text-[10px] animate-pulse font-bold">
-                  NAVIGATING...
-                </span>
-              )}
-              <span className="text-emerald-700 font-bold text-[10px]">REAL-TIME RENDER</span>
-            </div>
+        {/* Address bar: Enter navigates */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (previewUrlInput) handleNavigatePreview(previewUrlInput);
+          }}
+          className="flex items-center gap-2 rounded-md border border-line bg-white px-2.5 py-1.5 font-mono text-xs focus-within:border-fg"
+        >
+          <button
+            type="button"
+            onClick={() => handleNavigatePreview("/")}
+            title="Go to home route"
+            className="shrink-0 text-muted hover:text-fg"
+          >
+            <Home className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="sr-only">Go to home route</span>
+          </button>
+          <span className="shrink-0 text-[#A3A3A3] truncate max-w-[45%]">{base}</span>
+          <label htmlFor="preview-route-input" className="sr-only">
+            Route
+          </label>
+          <input
+            id="preview-route-input"
+            type="text"
+            value={previewUrlInput !== "" ? previewUrlInput : previewRoute}
+            onChange={(e) => setPreviewUrlInput(e.target.value)}
+            placeholder={previewRoute}
+            className="min-w-0 flex-1 bg-transparent text-fg outline-none placeholder:text-[#A3A3A3]"
+          />
+          <button type="submit" className="sr-only">
+            Navigate
+          </button>
+          {isNavigatingPreview && <span className="shrink-0 text-[10px] text-muted">Loading...</span>}
+        </form>
+
+        {/* Routes as quiet text links */}
+        <nav aria-label="Discovered routes" className="flex items-center gap-3 overflow-x-auto pb-0.5 font-mono text-[11px]">
+          {routeList.map((tab, idx) => {
+            const isActive =
+              previewRoute === tab.route ||
+              (tab.route !== "/" && previewRoute.includes(tab.route.replace(/^\//, "")));
+            return (
+              <button
+                key={idx}
+                type="button"
+                aria-current={isActive ? "page" : undefined}
+                onClick={() => {
+                  setPreviewUrlInput(tab.route);
+                  handleNavigatePreview(tab.route);
+                }}
+                className={`shrink-0 transition-colors ${
+                  isActive ? "text-fg underline underline-offset-4" : "text-muted hover:text-fg"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Browser frame */}
+        <div className="overflow-hidden rounded-md border border-line bg-white">
+          <div className="flex h-7 items-center border-b border-line bg-[#FAFAF9] px-3 font-mono text-[11px] text-muted">
+            <span className="truncate">{fullPreviewUrl}</span>
           </div>
 
           <div
-            className={`transition-all duration-300 mx-auto relative ${
-              viewportMode === "desktop"
-                ? "w-full h-[520px]"
-                : viewportMode === "tablet"
-                ? "w-[85%] h-[520px]"
-                : "w-[55%] h-[520px]"
+            className={`transition-all duration-300 mx-auto relative h-[520px] ${
+              viewportMode === "desktop" ? "w-full" : viewportMode === "tablet" ? "w-[85%]" : "w-[55%]"
             }`}
           >
             {isNavigatingPreview && (
-              <div className="absolute inset-0 bg-white/70 backdrop-blur-2xs z-20 flex flex-col items-center justify-center gap-2 font-mono text-xs text-[#171717]">
-                <span className="w-5 h-5 rounded-full border-2 border-[#171717] border-t-transparent animate-spin"></span>
-                <span>Dispatching Chromium Context to {previewRoute}...</span>
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-white/70 font-mono text-xs text-fg">
+                <span className="w-5 h-5 rounded-full border-2 border-fg border-t-transparent animate-spin" aria-hidden="true"></span>
+                <span>Loading {previewRoute}...</span>
               </div>
             )}
 
-            {targetUrl?.toLowerCase().includes("padmora") ? (
+            {isPadmora ? (
               <div className="h-full w-full relative overflow-y-auto bg-zinc-100 flex flex-col items-center">
-                <div className="sticky top-3 self-end mr-3 mb-[-36px] bg-white/95 backdrop-blur-sm border border-[#E5E5E5] px-3 py-1.5 rounded-full text-[10px] font-mono text-emerald-700 font-bold flex items-center gap-2 shadow-xs z-10">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>STOREFRONT: PADMORA SAREES (MOHAR COLLECTION)</span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setFullImageModal({
-                        src: "/screenshots/padmora-home.png",
-                        title: "Padmora Sarees by Yashi | Storefront",
-                        route: "https://padmorasarees.com/",
-                        description: "Full High-Resolution Storefront Viewport (Mohar Collection)",
-                      })
-                    }
-                    className="ml-1 p-0.5 hover:bg-zinc-100 rounded text-zinc-600 transition-colors cursor-pointer"
-                    title="Expand Full Page"
-                  >
-                    <Maximize2 className="w-3 h-3" />
-                  </button>
-                </div>
-                <img
-                  src="/screenshots/padmora-home.png"
-                  alt="Padmora Sarees Storefront Render"
-                  className="w-full h-auto block select-none shadow-xs"
+                <ScreenshotBadge
+                  label="Storefront"
+                  onExpand={() =>
+                    setFullImageModal({
+                      src: "/screenshots/padmora-home.png",
+                      title: "Padmora Sarees by Yashi | Storefront",
+                      route: "https://padmorasarees.com/",
+                      description: "Full High-Resolution Storefront Viewport (Mohar Collection)",
+                    })
+                  }
                 />
+                <img src="/screenshots/padmora-home.png" alt="Padmora Sarees storefront" className="w-full h-auto block select-none" />
               </div>
-            ) : (!targetUrl || targetUrl.includes("wealthwise") || targetUrl.includes("mywealthwise")) ? (
+            ) : !targetUrl || targetUrl.includes("wealthwise") || targetUrl.includes("mywealthwise") ? (
               <div className="h-full w-full relative overflow-y-auto bg-zinc-100 flex flex-col items-center">
                 {(() => {
-                  const activeScreenshotSrc =
-                    previewRoute.includes("signup")
-                      ? "/screenshots/wealthwise-signup.png"
-                      : previewRoute.includes("signin") || previewRoute.includes("login")
-                      ? "/screenshots/wealthwise-auth.png"
-                      : previewRoute.includes("budget")
-                      ? "/screenshots/wealthwise-budget.png"
-                      : previewRoute.includes("track")
-                      ? "/screenshots/wealthwise-track.png"
-                      : "/screenshots/wealthwise-home.png";
-                  const activeRouteName =
-                    previewRoute.includes("signup")
-                      ? "ROUTE: /auth/signup (SIGN-UP FORM)"
-                      : previewRoute.includes("signin") || previewRoute.includes("login")
-                      ? "ROUTE: /auth/signin (SIGN-IN PORTAL)"
-                      : previewRoute.includes("budget")
-                      ? "FEATURE: BUDGET DASHBOARD"
-                      : previewRoute.includes("track")
-                      ? "FEATURE: EXPENSE TRACKER"
-                      : "ROUTE: / (HOMEPAGE HERO)";
+                  const activeScreenshotSrc = previewRoute.includes("signup")
+                    ? "/screenshots/wealthwise-signup.png"
+                    : previewRoute.includes("signin") || previewRoute.includes("login")
+                    ? "/screenshots/wealthwise-auth.png"
+                    : previewRoute.includes("budget")
+                    ? "/screenshots/wealthwise-budget.png"
+                    : previewRoute.includes("track")
+                    ? "/screenshots/wealthwise-track.png"
+                    : "/screenshots/wealthwise-home.png";
+                  const activeRouteName = previewRoute.includes("signup")
+                    ? "/auth/signup"
+                    : previewRoute.includes("signin") || previewRoute.includes("login")
+                    ? "/auth/signin"
+                    : previewRoute.includes("budget")
+                    ? "/budget"
+                    : previewRoute.includes("track")
+                    ? "/track"
+                    : "/";
                   return (
                     <>
-                      <div className="sticky top-3 self-end mr-3 mb-[-36px] bg-white/95 backdrop-blur-sm border border-[#E5E5E5] px-3 py-1.5 rounded-full text-[10px] font-mono text-emerald-700 font-bold flex items-center gap-2 shadow-xs z-10">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <span>{activeRouteName}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setFullImageModal({
-                              src: activeScreenshotSrc,
-                              title: `WealthWise &bull; ${activeRouteName}`,
-                              route: previewRoute,
-                              description: "High-Resolution Target Viewport Render",
-                            })
-                          }
-                          className="ml-1 p-0.5 hover:bg-zinc-100 rounded text-zinc-600 transition-colors cursor-pointer"
-                          title="Expand Full Page"
-                        >
-                          <Maximize2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                      <img
-                        src={activeScreenshotSrc}
-                        alt="WealthWise Target Render"
-                        className="w-full h-auto block select-none shadow-xs"
+                      <ScreenshotBadge
+                        label={activeRouteName}
+                        onExpand={() =>
+                          setFullImageModal({
+                            src: activeScreenshotSrc,
+                            title: `WealthWise · ${activeRouteName}`,
+                            route: previewRoute,
+                            description: "High-Resolution Target Viewport Render",
+                          })
+                        }
                       />
+                      <img src={activeScreenshotSrc} alt={`WealthWise ${activeRouteName}`} className="w-full h-auto block select-none" />
                     </>
                   );
                 })()}
               </div>
             ) : (
               <iframe
-                src={`/api/proxy-preview?url=${encodeURIComponent(
-                  targetUrl.replace(/\/$/, "") + (previewRoute.startsWith("/") ? previewRoute : "/" + previewRoute)
-                )}`}
-                title="Live Target Web Application Viewport"
+                src={`/api/proxy-preview?url=${encodeURIComponent(fullPreviewUrl)}`}
+                title="Live target preview"
                 sandbox="allow-same-origin allow-forms"
                 className="w-full h-full border-0 bg-white"
                 loading="lazy"
@@ -296,36 +240,26 @@ export default function LiveBrowserTab({
             )}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Discovered Locators Column (4 Cols) */}
-      <div className="rounded-xl border border-[#E5E5E5] bg-white p-5 space-y-4 shadow-xs lg:col-span-4">
-        <div className="border-b border-[#F5F5F4] pb-3">
-          <h3 className="text-sm font-semibold text-[#171717]">
-            Discovered Locators ({model?.buttons?.length || 0})
+      {/* Discovered locators */}
+      <section className="rounded-lg border border-line bg-white p-4 sm:p-5 space-y-3 lg:col-span-4" aria-labelledby="locators-heading">
+        <div>
+          <h3 id="locators-heading" className="text-sm font-semibold text-fg flex items-baseline gap-2">
+            Locators <span className="font-mono text-xs font-normal text-muted">{buttonList.length}</span>
           </h3>
-          <p className="text-xs text-[#737373] mt-0.5">
-            Click any locator to navigate preview &amp; copy selector
-          </p>
+          <p className="text-xs text-muted mt-0.5">Click one to copy its selector.</p>
         </div>
 
-        <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
-          {(() => {
-            const isPadmoraSite = targetUrl?.toLowerCase().includes("padmora");
-            const buttonList =
-              model?.buttons && model.buttons.length > 0
-                ? model.buttons
-                : isPadmoraSite
-                ? ["EXPLORE MOHAR", "Shop by Weave", "Maheshwari", "Banarasi", "VIEW ALL SAREES", "FIND MY SAREE"]
-                : [];
-
-            return buttonList.length > 0 ? (
-              buttonList.map((btn, idx) => {
-                const sel = `button:has-text("${btn}")`;
-                const btnLower = btn.toLowerCase();
-                return (
-                  <div
-                    key={idx}
+        {buttonList.length > 0 ? (
+          <ul className="max-h-[520px] overflow-y-auto divide-y divide-line border-t border-line">
+            {buttonList.map((btn, idx) => {
+              const sel = `button:has-text("${btn}")`;
+              const btnLower = btn.toLowerCase();
+              return (
+                <li key={idx}>
+                  <button
+                    type="button"
                     onClick={() => {
                       copyToClipboard(sel, "selector");
                       if (btnLower.includes("budget")) {
@@ -334,42 +268,33 @@ export default function LiveBrowserTab({
                         handleNavigatePreview("/track");
                       } else if (btnLower.includes("sign in") || btnLower.includes("login")) {
                         handleNavigatePreview("/auth/signin");
-                      } else if (
-                        btnLower.includes("free") ||
-                        btnLower.includes("sign up") ||
-                        btnLower.includes("get started")
-                      ) {
+                      } else if (btnLower.includes("free") || btnLower.includes("sign up") || btnLower.includes("get started")) {
                         handleNavigatePreview("/auth/signup");
                       } else if (btnLower.includes("home") || btnLower.includes("wealthwise") || btnLower.includes("mohar")) {
                         handleNavigatePreview("/");
                       }
                     }}
-                    className="group flex items-center justify-between rounded-xl border border-[#E5E5E5] bg-[#FAFAF9]/80 p-2.5 text-xs transition-all hover:border-[#171717] hover:bg-white cursor-pointer shadow-2xs"
+                    title="Copy selector"
+                    className="group flex w-full items-center justify-between gap-2 py-2 text-left text-xs hover:bg-subtle"
                   >
-                    <div className="truncate pr-2">
-                      <span className="block truncate font-medium text-[#171717]">
-                        {btn}
-                      </span>
-                      <code className="font-mono text-[10px] text-[#737373]">{sel}</code>
-                    </div>
-                    <span className="text-[#A3A3A3] group-hover:text-[#171717] shrink-0">
-                      {copiedSelector === sel ? (
-                        <Check className="w-4 h-4 text-emerald-600" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
+                    <span className="min-w-0">
+                      <span className="block truncate text-fg">{btn}</span>
+                      <code className="block truncate font-mono text-[10px] text-muted">{sel}</code>
                     </span>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="text-xs text-[#A3A3A3] text-center py-6">
-                Locators will appear here once synthesized.
-              </div>
-            );
-          })()}
-        </div>
-      </div>
+                    {copiedSelector === sel ? (
+                      <Check className="w-3.5 h-3.5 shrink-0 text-emerald-600" aria-label="Copied" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5 shrink-0 text-muted opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="border-t border-line pt-3 text-xs text-muted">Locators appear here once the crawl finds them.</p>
+        )}
+      </section>
     </div>
   );
 }
