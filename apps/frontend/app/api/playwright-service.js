@@ -80,7 +80,44 @@ export async function getBrowser() {
 /**
  * Real-time Playwright Crawler: Navigates to target website, discovers DOM links, inputs, and buttons.
  */
-export async function crawlWithPlaywright(targetUrl) {
+/**
+ * Sign in with a developer-supplied test account, in the given page's browser context.
+ * Never logs or returns the password. Success means the password field is gone after submit.
+ */
+async function signIn(page, targetUrl, auth) {
+  const loginUrl = new URL(auth.login_path || "/login", targetUrl).toString();
+  await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 18000 });
+  await page.waitForTimeout(400);
+
+  const password = page.locator("input[type='password']").first();
+  if (!(await password.count())) {
+    return { attempted: true, ok: false, reason: `No password field found on ${new URL(loginUrl).pathname}` };
+  }
+  const username = page
+    .locator(
+      "input[type='email'], input[name*='email' i], input[id*='email' i], input[name*='user' i], input[id*='user' i], input[type='text']"
+    )
+    .first();
+  if (!(await username.count())) {
+    return { attempted: true, ok: false, reason: `No username or email field found on ${new URL(loginUrl).pathname}` };
+  }
+
+  await username.fill(auth.username);
+  await password.fill(auth.password);
+  await Promise.all([
+    page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {}),
+    password.press("Enter"),
+  ]);
+  await page.waitForTimeout(800);
+
+  const stillOnLogin = await page.locator("input[type='password']").first().isVisible().catch(() => false);
+  if (stillOnLogin) {
+    return { attempted: true, ok: false, reason: "Still on the login page after submitting" };
+  }
+  return { attempted: true, ok: true, landedOn: new URL(page.url()).pathname };
+}
+
+export async function crawlWithPlaywright(targetUrl, auth = null) {
   let browser = null;
   let page = null;
   const startTime = Date.now();
@@ -94,20 +131,33 @@ export async function crawlWithPlaywright(targetUrl) {
     });
     page = await context.newPage();
 
+    // Optional sign-in first, so the crawl below runs as the signed-in test user.
+    let login = { attempted: false };
+    let afterLoginPath = null;
+    if (auth && auth.username && auth.password) {
+      try {
+        login = await signIn(page, targetUrl, auth);
+        if (login.ok) afterLoginPath = login.landedOn;
+      } catch (loginErr) {
+        login = { attempted: true, ok: false, reason: loginErr.message.split("\n")[0] };
+      }
+    }
+
     console.log(`[PlaywrightService] Navigating to ${targetUrl}...`);
+    const navStart = Date.now();
     const response = await page.goto(targetUrl, {
       waitUntil: "domcontentloaded",
       timeout: 18000,
     });
 
     const httpStatus = response ? response.status() : 200;
-    const latencyMs = Date.now() - startTime;
+    const latencyMs = Date.now() - navStart;
     await page.waitForTimeout(600);
 
     const pageTitle = await page.title();
 
     // Extract links, buttons, inputs, headings from live rendered DOM
-    const domData = await page.evaluate((baseUrl) => {
+    const extractDom = (baseUrl) => {
       const baseHostname = new URL(baseUrl).hostname;
       
       // Internal links
@@ -164,7 +214,24 @@ export async function crawlWithPlaywright(targetUrl) {
         inputs: inputs.slice(0, 8),
         headings: headings.slice(0, 8),
       };
-    }, targetUrl);
+    };
+
+    const domData = await page.evaluate(extractDom, targetUrl);
+
+    // Signed in: also crawl the page the login landed on, which is usually behind the login wall.
+    if (afterLoginPath && afterLoginPath !== new URL(targetUrl).pathname) {
+      try {
+        await page.goto(new URL(afterLoginPath, targetUrl).toString(), { waitUntil: "domcontentloaded", timeout: 18000 });
+        await page.waitForTimeout(600);
+        const privateData = await page.evaluate(extractDom, targetUrl);
+        domData.routes = Array.from(new Set([...domData.routes, afterLoginPath, ...privateData.routes]));
+        domData.buttons = Array.from(new Set([...domData.buttons, ...privateData.buttons])).slice(0, 14);
+        domData.inputs = [...domData.inputs, ...privateData.inputs].slice(0, 12);
+        domData.headings = [...domData.headings, ...privateData.headings].slice(0, 12);
+      } catch (privErr) {
+        console.error(`[PlaywrightService] Post-login crawl error on ${afterLoginPath}:`, privErr.message);
+      }
+    }
 
     await context.close();
 
@@ -177,6 +244,7 @@ export async function crawlWithPlaywright(targetUrl) {
       buttons: domData.buttons,
       inputs: domData.inputs,
       headings: domData.headings,
+      login,
     };
   } catch (err) {
     console.error(`[PlaywrightService] Crawl error on ${targetUrl}:`, err.message);

@@ -4,6 +4,7 @@
 
 import * as cheerio from "cheerio";
 import { crawlWithPlaywright, captureRouteScreenshot } from "./playwright-service";
+import { runProbes, buildPytestFile } from "./probes";
 
 if (!globalThis.__drishtiStore) {
   globalThis.__drishtiStore = {
@@ -29,9 +30,22 @@ if (!globalStore.generatedTests) globalStore.generatedTests = new Map();
 if (!globalStore.memories) globalStore.memories = new Map();
 if (!globalStore.healedChains) globalStore.healedChains = new Map();
 if (!globalStore.nlSteps) globalStore.nlSteps = new Map();
+if (!globalStore.namedTests) globalStore.namedTests = new Map();
 
 export function getStore() {
   return globalStore;
+}
+
+// Accepts only { login_path, username, password } as short strings. The login path must be a
+// path on the target ("/login"), so credentials can never be sent to a different host.
+function sanitizeAuth(auth) {
+  if (!auth || typeof auth !== "object") return null;
+  const { username, password } = auth;
+  const isText = (v) => typeof v === "string" && v.length > 0 && v.length <= 256;
+  if (!isText(username) || !isText(password)) return null;
+  const path = typeof auth.login_path === "string" ? auth.login_path.trim() : "";
+  const loginPath = path.startsWith("/") && !path.startsWith("//") && path.length <= 256 ? path : "/login";
+  return { login_path: loginPath, username, password };
 }
 
 export function createRun(runConfig) {
@@ -62,8 +76,9 @@ export function createRun(runConfig) {
   globalStore.events.set(runId, []);
   globalStore.findings.set(runId, []);
 
-  // Launch the dynamic pipeline asynchronously
-  executeDynamicPipeline(runId, targetUrl, runConfig);
+  // Launch the dynamic pipeline asynchronously. Credentials travel only in this call,
+  // never in runDoc, so no API response can return them.
+  executeDynamicPipeline(runId, targetUrl, { ...runConfig, auth: sanitizeAuth(runConfig.auth) });
 
   return runDoc;
 }
@@ -95,9 +110,16 @@ function updateRunStage(runId, stage, status) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Shows enough of a test-account username to recognise it, never the full value.
+// "dev.tester@example.com" -> "d***@example.com"; "qa_user" -> "q***"
+function maskUsername(username = "") {
+  const [local, domain] = String(username).split("@");
+  const head = local ? local[0] : "";
+  return domain ? `${head}***@${domain}` : `${head}***`;
+}
+
 async function executeDynamicPipeline(runId, targetUrl, config) {
   try {
-    const isShopLite = targetUrl.includes("3001") || targetUrl.includes("shoplite");
     const isGitHub = targetUrl.includes("github.com");
     let githubRepo = null; // { owner, repo, defaultBranch }
     if (isGitHub) {
@@ -300,20 +322,26 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
     updateRunStage(runId, "S2", "exploring");
     emitEvent(runId, "S2", "stage_started", `Stage S2: Autonomous priority crawler dispatched in ${config.mode || "sandbox"} mode`);
 
-    // Handle ShopLite benchmark vs Real Target Website
     const deadLinks = [];
     const auditedSubroutes = [];
 
-    if (isShopLite) {
-      discoveredRoutes.clear();
-      ["/", "/signup", "/login", "/forgot-password", "/account", "/products", "/cart", "/checkout"].forEach((r) =>
-        discoveredRoutes.add(r)
-      );
-    } else {
+    {
       // Execute live Playwright exploration for real target website
       try {
         emitEvent(runId, "S2", "playwright_launch", `Playwright Chromium browser context launched (1280x800)`);
-        const pwCrawl = await crawlWithPlaywright(targetUrl);
+        const auth = config.auth || null;
+        if (auth) {
+          emitEvent(runId, "S2", "auth_started", `Signing in as ${maskUsername(auth.username)} on ${auth.login_path || "/login"}`);
+        }
+        const pwCrawl = await crawlWithPlaywright(targetUrl, auth);
+        if (auth) {
+          const login = pwCrawl?.login || { ok: false, reason: pwCrawl?.error || "Browser could not start" };
+          if (login.ok) {
+            emitEvent(runId, "S2", "auth_signed_in", `Signed in as ${maskUsername(auth.username)}; landed on ${login.landedOn}`);
+          } else {
+            emitEvent(runId, "S2", "auth_failed", `Sign-in failed: ${login.reason}. Continuing as a signed-out visitor.`);
+          }
+        }
         if (pwCrawl && pwCrawl.routes && pwCrawl.routes.length > 0) {
           pwCrawl.routes.forEach((r) => discoveredRoutes.add(r));
           if (pwCrawl.pageTitle && pwCrawl.pageTitle !== hostname) {
@@ -356,10 +384,6 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
             discoveredRoutes.add(`/#${slug}`);
           }
         });
-      }
-
-      if (hostname.includes("wealthwise") || targetUrl.includes("wealthwise")) {
-        ["/dashboard", "/budget", "/transactions", "/settings"].forEach((r) => discoveredRoutes.add(r));
       }
 
       // Prioritize authentication gateways (signup, login, signin, register)
@@ -510,7 +534,7 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
         id: `mem_${Date.now().toString(36)}_2`,
         domain: hostname,
         type: "navigation_flow",
-        summary: `Target topology: ${discoveredRoutes.size} verified route/anchor states with 0 dead links`,
+        summary: `Target topology: ${discoveredRoutes.size} route/anchor states discovered`,
         timestamp: new Date().toISOString(),
         confidence: 0.98,
       },
@@ -562,7 +586,7 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
         : []),
       {
         id: "step_05",
-        text: `Audit TLS 1.3 handshake, security headers, and console signals`,
+        text: `Check security headers and console errors`,
         type: "assert",
         status: "ready",
         confidence: 0.99,
@@ -579,512 +603,64 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
     );
 
     // -------------------------------------------------------------------------
-    // S4: Plan Tests (Grounded Scenarios)
+    // S4-S6: Plan, run and replay generic checks (see probes.js)
     // -------------------------------------------------------------------------
     updateRunStage(runId, "S4", "planning");
-    emitEvent(runId, "S4", "stage_started", `Stage S4: Formulating grounded test scenarios with Assertion DSL`);
+    emitEvent(runId, "S4", "stage_started", `Stage S4: Planning checks from the pages, forms and fields found on ${hostname}`);
 
-    await sleep(800);
-
-    if (isShopLite) {
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_signup_happy: Valid user registration journey`);
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_signup_malformed_email: Email format boundary check (B1)`);
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_signup_duplicate: Duplicate email collision check (B2)`);
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_login_case_insensitive: Case-insensitivity check (B3)`);
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_forgot_password_navigation: Navigation dead-link check (B4)`);
-    } else {
-      const primaryBtn = buttons[0] || "Interactive CTA";
-      const primaryInput = inputs[0]?.placeholder ? `"${inputs[0].placeholder}"` : "Search / Input Field";
-      const signupRoute = Array.from(discoveredRoutes).find((r) => /signup|register/i.test(r)) || "/auth/signup";
-      const signinRoute = Array.from(discoveredRoutes).find((r) => /login|signin/i.test(r)) || "/auth/signin";
-
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_root_hero: Verify critical H1 headline ("${h1Text.substring(0, 40)}")`);
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_signup_onboarding: Verify user sign-up portal (${signupRoute}) with form validation contracts`);
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_signin_auth: Verify user sign-in gateway (${signinRoute}) with credential protection`);
-      if (discoveredRoutes.has("/dashboard")) {
-        emitEvent(runId, "S4", "scenario_planned", `Planned sc_auth_dashboard: Authenticated session penetration & dashboard overview (/dashboard)`);
-        emitEvent(runId, "S4", "scenario_planned", `Planned sc_budget_planner: Interactive monthly budget tracking & allocation (/budget)`);
-        emitEvent(runId, "S4", "scenario_planned", `Planned sc_tx_ledger: Bank feed transactions & cash flow sync (/transactions)`);
-        emitEvent(runId, "S4", "scenario_planned", `Planned sc_security_settings: Account 2FA & profile security verification (/settings)`);
-      }
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_input_field: Form field interactive validation on ${primaryInput}`);
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_cta_action: Verify primary action target ("${primaryBtn.substring(0, 30)}")`);
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_states_integrity: Deep section & navigation integrity across ${discoveredRoutes.size} states`);
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_security_headers: TLS 1.3 encryption, CSP, and CORS policy audit`);
-      emitEvent(runId, "S4", "scenario_planned", `Planned sc_telemetry_health: Hard signal detection (0 uncaught JS exceptions, 0 HTTP 5xx)`);
-    }
-
-    emitEvent(runId, "S4", "stage_completed", `Planned grounded scenarios (0 ungrounded steps dropped)`);
-    await sleep(1000);
-
-    // -------------------------------------------------------------------------
-    // S5: Execute Scenarios in Isolated Contexts
-    // -------------------------------------------------------------------------
-    updateRunStage(runId, "S5", "executing");
-    emitEvent(runId, "S5", "stage_started", `Stage S5: Executing scenarios in isolated Playwright Chromium contexts`);
-
-    await sleep(600);
-    if (isShopLite) {
-      emitEvent(runId, "S5", "step_executed", `[sc_signup_happy] Navigated /signup -> Clicked #signup-btn -> /account (PASS)`);
-      await sleep(500);
-      emitEvent(runId, "S5", "assertion_failed", `[sc_signup_malformed_email] Expected validation error, received redirect to /account`);
-      await sleep(500);
-      emitEvent(runId, "S5", "signal_observed", `[sc_signup_duplicate] Caught HTTP 500 Internal Server Error`);
-      await sleep(500);
-      emitEvent(runId, "S5", "assertion_failed", `[sc_login_case_insensitive] Uppercase login failed with HTTP 401`);
-      await sleep(500);
-      emitEvent(runId, "S5", "signal_observed", `[sc_forgot_password_navigation] Navigated /forgot-password -> Received HTTP 404`);
-    } else {
-      const primaryBtn = buttons[0] || "Primary Action";
-      const primaryInput = inputs[0]?.placeholder ? `"${inputs[0].placeholder}"` : "Interactive Input";
-      const signupRoute = Array.from(discoveredRoutes).find((r) => /signup|register/i.test(r)) || "/auth/signup";
-      const signinRoute = Array.from(discoveredRoutes).find((r) => /login|signin/i.test(r)) || "/auth/signin";
-
-      emitEvent(runId, "S5", "step_executed", `[sc_root_hero] Located and verified main H1: "${h1Text.substring(0, 50)}" (PASS)`);
-      await sleep(350);
-      emitEvent(runId, "S5", "step_executed", `[sc_signup_onboarding] Navigated to ${signupRoute} -> Verified registration inputs & form submit bindings (PASS)`);
-      await sleep(350);
-      emitEvent(runId, "S5", "step_executed", `[sc_signin_auth] Navigated to ${signinRoute} -> Verified credential input fields & CSRF session protections (PASS)`);
-      if (discoveredRoutes.has("/dashboard")) {
-        await sleep(350);
-        emitEvent(runId, "S5", "step_executed", `[sc_auth_dashboard] Submitted credentials -> Authenticated session token issued -> /dashboard (PASS)`);
-        await sleep(350);
-        emitEvent(runId, "S5", "step_executed", `[sc_budget_planner] Loaded /budget -> Verified monthly budget calculations & dynamic category allocations (PASS)`);
-        await sleep(350);
-        emitEvent(runId, "S5", "step_executed", `[sc_tx_ledger] Loaded /transactions -> Verified ledger consistency & bank balance synchronization (PASS)`);
-        await sleep(350);
-        emitEvent(runId, "S5", "step_executed", `[sc_security_settings] Loaded /settings -> Verified Two-Factor (2FA) enforcement & session security log (PASS)`);
-      }
-      await sleep(350);
-      emitEvent(runId, "S5", "step_executed", `[sc_input_field] Verified input focus and typing on ${primaryInput} (PASS)`);
-      await sleep(350);
-      emitEvent(runId, "S5", "step_executed", `[sc_cta_action] Located actionable CTA button: "${primaryBtn.substring(0, 30)}" (PASS)`);
-      await sleep(350);
-      emitEvent(runId, "S5", "step_executed", `[sc_states_integrity] Checked ${discoveredRoutes.size} states across ${hostname} (0 dead links) (PASS)`);
-      await sleep(350);
-      emitEvent(runId, "S5", "step_executed", `[sc_security_headers] Verified HTTPS TLS 1.3 handshake & MIME type integrity (PASS)`);
-      await sleep(350);
-      emitEvent(runId, "S5", "signal_observed", `[sc_telemetry_health] Network egress clean, 0 uncaught client exceptions (PASS)`);
-    }
-
-    emitEvent(runId, "S5", "stage_completed", `Execution completed across isolated contexts.`);
-    await sleep(1000);
-
-    // -------------------------------------------------------------------------
-    // S6: Validate Candidates (3x Replay)
-    // -------------------------------------------------------------------------
-    updateRunStage(runId, "S6", "validating");
-    emitEvent(runId, "S6", "stage_started", `Stage S6: 3× Replay verification against clean contexts with health probes`);
-
-    await sleep(800);
-
-    let findingsList = [];
-    if (isShopLite) {
-      emitEvent(runId, "S6", "replay_pass", `Defect B1 reproduced 3/3 times. Probes healthy.`);
-      emitEvent(runId, "S6", "replay_pass", `Defect B2 reproduced 3/3 times (HTTP 500). Probes healthy.`);
-      emitEvent(runId, "S6", "replay_pass", `Defect B3 reproduced 3/3 times (HTTP 401). Probes healthy.`);
-      emitEvent(runId, "S6", "replay_pass", `Defect B4 reproduced 3/3 times (HTTP 404). Probes healthy.`);
-
-      findingsList = [
-        {
-          id: "B1",
-          scenario_id: "sc_signup_malformed_email",
-          title: "Malformed Email Accepted During Sign-Up",
-          journey: "J1: Sign-up & User Registration",
-          category: "Validation Invariant",
-          severity: "medium",
-          replay_rate: "3/3 (100% Verified)",
-          classification_reason: "Malformed email 'invalid-email-address' accepted without rejection",
-          anomaly_location: {
-            selector: "input[name='email']",
-            description: "Email input element accepts malformed syntax",
-            screen: "/signup",
-            x: 28, // % from left
-            y: 42, // % from top
-            w: 44, // % width
-            h: 8,  // % height
-          },
-          trigger_steps: [
-            "Navigate to /signup",
-            "Fill email field with malformed value 'invalid-email-address'",
-            "Fill password field with 'validPassword123'",
-            "Click primary action 'Sign Up' button",
-            "Assert response status is 400 and user stays on /signup"
-          ],
-          expected: "Malformed email rejected with HTTP 400 Bad Request; user stays on /signup with friendly validation error",
-          actual: "Account created with HTTP 201 Created; redirected to /account dashboard",
-          evidence: "HTTP 201 Created • Response: {\"ok\": true, \"user_id\": 14} • Redirect URL: /account",
-        },
-        {
-          id: "B2",
-          scenario_id: "sc_signup_duplicate",
-          title: "HTTP 500 Uncaught Crash on Duplicate Registration",
-          journey: "J1: Sign-up & User Registration",
-          category: "Server Error Invariant",
-          severity: "high",
-          replay_rate: "3/3 (100% Verified)",
-          classification_reason: "Duplicate registration threw uncaught 500 error: 'Duplicate key constraint violation'",
-          anomaly_location: {
-            selector: "#signup-form",
-            description: "Uncaught 500 error boundary during duplicate account collision",
-            screen: "/signup",
-            x: 25,
-            y: 35,
-            w: 50,
-            h: 40,
-          },
-          trigger_steps: [
-            "Register user with email 'dup@example.com'",
-            "Attempt to register second user with same email 'dup@example.com'",
-            "Assert response status < 500 and user-friendly message displayed"
-          ],
-          expected: "Duplicate registration rejected with 'already registered' message; HTTP 409 Conflict",
-          actual: "POST /api/signup threw uncaught HTTP 500 Internal Server Error (Database constraint collision)",
-          evidence: "HTTP 500 Server Error • Payload: {\"error\": \"SQLITE_CONSTRAINT: UNIQUE constraint failed: users.email\"}",
-        },
-        {
-          id: "B3",
-          scenario_id: "sc_login_case_insensitive",
-          title: "Case-Sensitive Email Rejection on Login",
-          journey: "J2: User Login & Session",
-          category: "Logic Invariant",
-          severity: "medium",
-          replay_rate: "3/3 (100% Verified)",
-          classification_reason: "Login with uppercase email rejected with 401 (violates case-insensitive rule)",
-          anomaly_location: {
-            selector: "input[name='email']",
-            description: "Email input enforces case-sensitive matching causing 401",
-            screen: "/login",
-            x: 28,
-            y: 40,
-            w: 44,
-            h: 8,
-          },
-          trigger_steps: [
-            "Register account with lowercase email 'caseuser@example.com'",
-            "Navigate to /login",
-            "Attempt login using uppercase 'CASEUSER@example.com'",
-            "Click 'Log In' button"
-          ],
-          expected: "Login succeeds regardless of email casing per RFC 5321 / application ground truth",
-          actual: "Login rejected with HTTP 401 Unauthorized ('Invalid email or password')",
-          evidence: "HTTP 401 Unauthorized • Response: {\"error\": \"Invalid email or password\"}",
-        },
-        {
-          id: "B4",
-          scenario_id: "sc_forgot_password_navigation",
-          title: "Dead Link (HTTP 404) on 'Forgot Password?'",
-          journey: "J2: User Login & Navigation",
-          category: "Dead Link Invariant",
-          severity: "low",
-          replay_rate: "3/3 (100% Verified)",
-          classification_reason: "Forgot password link returned HTTP 404 dead link",
-          anomaly_location: {
-            selector: "a[href='/forgot-password']",
-            description: "Anchor link navigates to non-existent 404 route",
-            screen: "/login",
-            x: 48,
-            y: 62,
-            w: 24,
-            h: 6,
-          },
-          trigger_steps: [
-            "Navigate to /login",
-            "Locate and click 'Forgot password?' anchor link (href='/forgot-password')",
-            "Verify destination route loads with HTTP 200 OK"
-          ],
-          expected: "Navigates to active password recovery screen (/forgot-password) with HTTP 200 OK",
-          actual: "Navigates to /forgot-password which returns HTTP 404 Not Found dead page",
-          evidence: "HTTP 404 Not Found • Target URI: /forgot-password • Convention: dead-link detector",
-        },
-      ];
-      emitEvent(runId, "S6", "stage_completed", `Validation complete: 4 of 4 candidate defects CONFIRMED (0% false positives)`);
-    } else {
-      // REAL LIVE TARGET AUDIT FINDINGS:
-      // 1. Check for real dead links
-      deadLinks.forEach((dl, i) => {
-        findingsList.push({
-          id: `BUG-DL${i + 1}`,
-          scenario_id: `sc_dead_link_${i + 1}`,
-          title: `Dead Link (HTTP 404) Detected on '${dl.route}'`,
-          journey: "Navigation & Link Integrity",
-          category: "Dead Link Invariant",
-          severity: "medium",
-          replay_rate: "3/3 (100% Verified)",
-          classification_reason: `Internal navigation route '${dl.route}' returned HTTP 404 Not Found dead page`,
-          anomaly_location: {
-            selector: `a[href='${dl.route}']`,
-            description: `Broken anchor link pointing to dead 404 route: ${dl.route}`,
-            screen: "Navigation Bar / Body",
-            x: 20,
-            y: 15 + i * 10,
-            w: 35,
-            h: 6,
-          },
-          trigger_steps: [
-            `Navigate to ${targetUrl}`,
-            `Locate anchor tag with href='${dl.route}'`,
-            `Dispatch HTTP GET request to ${dl.url}`,
-            `Observe server error: HTTP 404 Not Found`
-          ],
-          expected: `Destination route '${dl.route}' resolves with HTTP 200 OK without dead links`,
-          actual: `Server returned HTTP 404 Not Found dead link`,
-          evidence: `HTTP 404 response on URL: ${dl.url} • Verified 3/3 times across isolated browser contexts`,
-        });
-      });
-
-      // 2. Check for missing Content-Security-Policy
-      if (!responseHeaders["content-security-policy"]) {
-        findingsList.push({
-          id: `SEC-CSP`,
-          scenario_id: `sc_sec_csp`,
-          title: `Missing Content-Security-Policy (CSP) Defense-in-Depth`,
-          journey: "Security Protocols & Egress",
-          category: "Security Invariant",
-          severity: "low",
-          replay_rate: "3/3 (100% Verified)",
-          classification_reason: `Server response lacks 'Content-Security-Policy' header, leaving client DOM vulnerable to cross-site script injection`,
-          anomaly_location: {
-            selector: "meta[http-equiv='Content-Security-Policy']",
-            description: "Missing security policy in HTTP response headers & head element",
-            screen: "HTTP Egress / Head",
-            x: 10,
-            y: 5,
-            w: 80,
-            h: 12,
-          },
-          trigger_steps: [
-            `Dispatch HTTP GET request to ${targetUrl}`,
-            `Inspect response headers for 'Content-Security-Policy'`,
-            `Observe missing security policy header`
-          ],
-          expected: `Content-Security-Policy header defines restricted default-src and script-src policies`,
-          actual: `Header 'Content-Security-Policy' is absent from server response headers`,
-          evidence: `Response headers from ${hostname}: ${Object.keys(responseHeaders).slice(0, 6).join(", ")}`,
-        });
-      }
-
-      // 3. Check for missing X-Content-Type-Options
-      if (!responseHeaders["x-content-type-options"]) {
-        findingsList.push({
-          id: `SEC-MIME`,
-          scenario_id: `sc_sec_mime`,
-          title: `Missing X-Content-Type-Options: nosniff Header`,
-          journey: "Security Protocols & Egress",
-          category: "Security Invariant",
-          severity: "low",
-          replay_rate: "3/3 (100% Verified)",
-          classification_reason: `Server lacks 'X-Content-Type-Options: nosniff', which allows user-agents to perform MIME-type sniffing vulnerabilities`,
-          anomaly_location: {
-            selector: "HTTP Transport Headers",
-            description: "MIME sniffing protection header is absent from server egress",
-            screen: "Network Layer",
-            x: 10,
-            y: 20,
-            w: 80,
-            h: 12,
-          },
-          trigger_steps: [
-            `Dispatch HTTP GET request to ${targetUrl}`,
-            `Inspect response headers for 'X-Content-Type-Options'`,
-            `Verify nosniff policy enforcement`
-          ],
-          expected: `Header 'X-Content-Type-Options: nosniff' configured on HTML and API responses`,
-          actual: `Header 'X-Content-Type-Options' is not sent by ${responseHeaders["server"] || hostname}`,
-          evidence: `MIME protocol inspection on ${targetUrl}: nosniff directive absent`,
-        });
-      }
-
-      // 4. Form input validation check
-      inputs.forEach((inp, idx) => {
-        if (
-          (inp.placeholder?.toLowerCase().includes("email") || inp.name?.toLowerCase().includes("email")) &&
-          inp.type !== "email"
-        ) {
-          findingsList.push({
-            id: `FORM-VAL-${idx + 1}`,
-            scenario_id: `sc_form_email_validation`,
-            title: `Unconstrained Email Input Field: '${inp.name || inp.placeholder}'`,
-            journey: "Interactive Form Contracts",
-            category: "Client Input Contract",
-            severity: "medium",
-            replay_rate: "3/3 (100% Verified)",
-            classification_reason: `Input element lacks HTML5 type='email' attribute. Form allows submitting malformed email strings without client-side format rejection.`,
-            anomaly_location: {
-              selector: `input[name='${inp.name || inp.placeholder}']`,
-              description: `Input allows unconstrained text without email syntax enforcement`,
-              screen: "Active Form View",
-              x: 25,
-              y: 40 + idx * 8,
-              w: 50,
-              h: 7,
-            },
-            trigger_steps: [
-              `Navigate to ${targetUrl}`,
-              `Locate input element with placeholder '${inp.placeholder}'`,
-              `Enter invalid email string 'invalid-format-test'`,
-              `Observe lack of standard browser validation constraint`
-            ],
-            expected: `Input element enforces type='email' to prevent malformed email payload submission`,
-            actual: `Input rendered with type='${inp.type}', bypassing browser syntax validation`,
-            evidence: `DOM inspection: <input type="${inp.type}" name="${inp.name}" placeholder="${inp.placeholder}">`,
-          });
+    let stageNow = "S4";
+    const log = (stage, type, message) => {
+      if (stage !== stageNow) {
+        if (stage === "S5") {
+          emitEvent(runId, "S4", "stage_completed", `Planning complete`);
+          updateRunStage(runId, "S5", "executing");
+          emitEvent(runId, "S5", "stage_started", `Stage S5: Running checks in fresh browser contexts`);
         }
-      });
+        if (stage === "S6" && stageNow !== "S6") {
+          updateRunStage(runId, "S6", "validating");
+        }
+        stageNow = stage === "S6" ? "S6" : stage;
+      }
+      emitEvent(runId, stage, type, message);
+    };
 
+    const probe = await runProbes(targetUrl, {
+      auth: config.auth || null,
+      safeMode: config.mode === "safe_exploration",
+      log,
+    });
+    const findingsList = probe.findings;
+    const failed = probe.tests.filter((t) => t.status === "failed").length;
+    const skipped = probe.tests.filter((t) => t.status === "skipped").length;
+
+    updateRunStage(runId, "S6", "validating");
+    emitEvent(
+      runId,
+      "S6",
+      "stage_completed",
+      `Checks complete: ${probe.tests.length} tests, ${failed} failed, ${skipped} skipped. ${findingsList.length} findings, each replayed in fresh browsers.`
+    );
+
+    const run = globalStore.runs.get(runId);
+    if (probe.authRequired) {
+      run.auth_required = probe.authRequired;
       emitEvent(
         runId,
         "S6",
-        "stage_completed",
-        `Validation complete: Audited live target ${hostname} across ${discoveredRoutes.size} states. ${findingsList.length} security & behavioral observations flagged.`
+        "auth_required",
+        `Sign-in needed: ${probe.authRequired.reason} Add a test account and run again to cover ${probe.authRequired.walled.length ? probe.authRequired.walled.join(", ") : "pages behind the sign-in"}.`
       );
     }
-
+    globalStore.namedTests.set(runId, probe.tests);
     globalStore.findings.set(runId, findingsList);
-    await sleep(800);
 
     // -------------------------------------------------------------------------
-    // S7-S10: Reports & Test Codegen with REAL SELECTORS
+    // S8-S9: Reports & pytest file built from the named tests
     // -------------------------------------------------------------------------
     updateRunStage(runId, "S8", "reporting");
-    emitEvent(runId, "S8", "stage_completed", `Stage S8: Evidence-backed reports and telemetry summaries assembled`);
+    emitEvent(runId, "S8", "stage_completed", `Stage S8: Report assembled from ${findingsList.length} findings`);
 
-    const btn1 = buttons[0] || "Get Started";
-    const inp1 = inputs[0]?.placeholder || "search";
-    const signupRoute =
-      Array.from(discoveredRoutes).find((r) => /signup|register/i.test(r)) ||
-      (isShopLite ? "/signup" : "/auth/signup");
-    const signinRoute =
-      Array.from(discoveredRoutes).find((r) => /login|signin/i.test(r)) ||
-      (isShopLite ? "/login" : "/auth/signin");
-
-    const tailoredPytestCode = isShopLite
-      ? `"""
-Autonomous Regression Test Suite — Generated by DRISHTI AI
-Target: http://localhost:3001 (ShopLite Sample Application)
-Stage 2 Gate Deliverable: Key Journeys (Sign-Up & Login) Test Suite
-"""
-
-import pytest
-from playwright.sync_api import Page, expect
-
-@pytest.fixture(scope="function")
-def context_page(page: Page):
-    # Isolated Chromium browser context
-    page.set_viewport_size({"width": 1440, "height": 900})
-    yield page
-
-def test_j1_signup_valid_registration(context_page: Page):
-    """J1 Happy Path: Valid user registration redirects to /account."""
-    context_page.goto("http://localhost:3001/signup")
-    context_page.fill("input[name='email']", "qa_user_test@example.com")
-    context_page.fill("input[name='password']", "SecurePass123")
-    context_page.click("button:has-text('Sign Up')")
-    context_page.wait_for_url("**/account")
-    expect(context_page.locator("body")).to_contain_text("Dashboard")
-
-def test_j1_signup_malformed_email_boundary(context_page: Page):
-    """J1 Invariant Check (B1): Malformed email must be rejected without redirect."""
-    context_page.goto("http://localhost:3001/signup")
-    context_page.fill("input[name='email']", "invalid-email-address")
-    context_page.fill("input[name='password']", "SecurePass123")
-    context_page.click("button:has-text('Sign Up')")
-    # Invariant: user must remain on signup page and see error
-    assert "/account" not in context_page.url, "DEFECT B1: Malformed email accepted!"
-
-def test_j2_login_case_insensitivity(context_page: Page):
-    """J2 Invariant Check (B3): Email login must be case-insensitive."""
-    context_page.goto("http://localhost:3001/login")
-    context_page.fill("input[name='email']", "REGISTERED_USER@EXAMPLE.COM")
-    context_page.fill("input[name='password']", "ValidPass123")
-    context_page.click("button:has-text('Log In')")
-    expect(context_page.locator("body")).not_to_contain_text("Invalid email or password")
-
-def test_j2_forgot_password_navigation(context_page: Page):
-    """J2 Navigation Check (B4): Forgot password link must not 404."""
-    response = context_page.goto("http://localhost:3001/forgot-password")
-    assert response.status != 404, "DEFECT B4: Forgot password route returned 404 Dead Link!"
-`
-      : `"""
-Autonomous Regression Test Suite — Generated by DRISHTI AI
-Target: ${targetUrl}
-Discovered States: ${discoveredRoutes.size} | Tech Stack: ${detectedTech.join(", ")}
-"""
-
-import re
-import pytest
-from playwright.sync_api import Page, expect
-
-@pytest.fixture(scope="function")
-def context_page(page: Page):
-    # Isolated Chromium browser context
-    page.set_viewport_size({"width": 1440, "height": 900})
-    yield page
-
-def test_01_core_dom_rendering(context_page: Page):
-    """Verify application root responds with 200 OK and critical DOM nodes mount."""
-    response = context_page.goto("${targetUrl}", wait_until="domcontentloaded")
-    assert response.status < 400, f"Expected HTTP < 400 but received {response.status}"
-    expect(context_page.locator("body")).to_be_visible()
-
-def test_02_headline_hierarchy(context_page: Page):
-    """Verify primary headline content discovered during autonomous crawl."""
-    context_page.goto("${targetUrl}")
-    # Target headline verified on live target
-    expect(context_page.locator("body")).to_contain_text("${h1Text.substring(0, 32).replace(/"/g, '\\"')}")
-
-def test_03_user_signup_onboarding_journey(context_page: Page):
-    """Verify sign-up & user onboarding flow on ${signupRoute}."""
-    response = context_page.goto("${targetUrl}${signupRoute.startsWith('/') ? signupRoute : '/' + signupRoute}", wait_until="domcontentloaded")
-    assert response.status < 400, f"Sign-up route returned HTTP {response.status}"
-    expect(context_page.locator("body")).to_be_visible()
-    # Check for email and password input elements
-    email_inp = context_page.locator("input[type='email'], input[name*='email'], input[placeholder*='email' i]").first
-    if email_inp.count() > 0:
-        email_inp.fill("qa_test_eval@example.com")
-        expect(email_inp).to_have_value("qa_test_eval@example.com")
-
-def test_04_user_signin_authentication_journey(context_page: Page):
-    """Verify user sign-in & authentication gateway on ${signinRoute}."""
-    response = context_page.goto("${targetUrl}${signinRoute.startsWith('/') ? signinRoute : '/' + signinRoute}", wait_until="domcontentloaded")
-    assert response.status < 400, f"Sign-in gateway returned HTTP {response.status}"
-    expect(context_page.locator("body")).to_be_visible()
-    # Validate login form controls
-    email_inp = context_page.locator("input[type='email'], input[name*='email'], input[placeholder*='email' i]").first
-    if email_inp.count() > 0:
-        email_inp.fill("authenticated_user@example.com")
-        expect(email_inp).to_have_value("authenticated_user@example.com")
-
-${
-  buttons.length > 0
-    ? `def test_05_interactive_cta_action(context_page: Page):
-    """Verify primary CTA button '${btn1.replace(/"/g, '\\"')}' is visible and clickable."""
-    context_page.goto("${targetUrl}")
-    btn = context_page.locator("button:has-text('${btn1.replace(/"/g, '\\"')}')").first
-    expect(btn).to_be_visible()
-    assert btn.is_enabled()`
-    : ""
-}
-
-${
-  inputs.length > 0
-    ? `def test_06_input_field_interactivity(context_page: Page):
-    """Verify input field with placeholder '${inp1.replace(/"/g, '\\"')}' accepts keyboard inputs."""
-    context_page.goto("${targetUrl}")
-    inp = context_page.locator("input").first
-    expect(inp).to_be_visible()
-    inp.fill("drishti_qa_test")
-    expect(inp).to_have_value("drishti_qa_test")`
-    : ""
-}
-
-def test_07_no_uncaught_client_errors(context_page: Page):
-    """Monitor browser console and ensure zero unhandled JS exceptions occurred."""
-    errors = []
-    context_page.on("pageerror", lambda exc: errors.append(str(exc)))
-    context_page.goto("${targetUrl}", wait_until="networkidle")
-    assert len(errors) == 0, f"Uncaught JavaScript exceptions detected: {errors}"
-`;
+    const tailoredPytestCode = buildPytestFile(targetUrl, probe.tests);
 
     globalStore.generatedTests.set(runId, tailoredPytestCode);
 
