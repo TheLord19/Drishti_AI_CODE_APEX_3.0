@@ -72,22 +72,10 @@ export default function Navbar() {
               </span>
             </div>
           </Link>
-
-          <div className="hidden sm:block h-3.5 w-px bg-[#E5E5E5] mx-1" />
-
-          <span className="hidden sm:inline-block text-xs font-medium text-[#737373] tracking-tight">
-            Autonomous QA Engine
-          </span>
         </div>
 
         {/* Navigation Destinations */}
         <nav className="flex items-center gap-3 sm:gap-5 text-xs font-medium">
-          <Link
-            href="/#operation-workspace"
-            className="text-[#737373] hover:text-[#171717] transition-colors hidden md:inline-block"
-          >
-            Product
-          </Link>
           <Link
             href="/#how-it-works"
             className="text-[#737373] hover:text-[#171717] transition-colors hidden md:inline-block"
@@ -104,7 +92,7 @@ export default function Navbar() {
             Benchmarks
           </Link>
           <a
-            href="https://github.com/TechWithAkash/agent-qa"
+            href="https://github.com/TheLord19/Drishti_AI_CODE_APEX_3.0"
             target="_blank"
             rel="noreferrer"
             className="text-[#737373] hover:text-[#171717] transition-colors hidden lg:flex items-center gap-1"
@@ -180,38 +168,27 @@ export default function Navbar() {
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <Link
-                href="/login"
-                id="nav-signin"
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  pathname === "/login"
-                    ? "bg-[#E5E5E5] text-[#171717]"
-                    : "text-[#737373] hover:text-[#171717] hover:bg-[#F5F5F4]"
-                }`}
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/register"
-                id="nav-register"
-                className={`hidden sm:inline-flex px-2.5 py-1.5 rounded-lg border border-[#E5E5E5] bg-white text-xs font-medium text-[#171717] hover:bg-[#F5F5F4] transition-colors shadow-2xs ${
-                  pathname === "/register" ? "border-[#171717]" : ""
-                }`}
-              >
-                Register
-              </Link>
-            </div>
+            <Link
+              href="/login"
+              id="nav-signin"
+              className={`transition-colors ${
+                pathname === "/login" || pathname === "/register"
+                  ? "text-[#171717]"
+                  : "text-[#737373] hover:text-[#171717]"
+              }`}
+            >
+              Sign in
+            </Link>
           )}
 
-          {/* Primary Action Button */}
+          {/* Secondary here: each page keeps its own single black primary action */}
           <Link
             href="/#operation-workspace"
             id="nav-new-run"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#171717] text-white hover:bg-black transition-all text-xs font-medium shadow-2xs group"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-[#E5E5E5] bg-white text-[#171717] hover:bg-[#F5F5F4] transition-colors text-xs font-medium"
           >
-            <span>Launch a Run</span>
-            <ArrowRight className="w-3 h-3 text-[#F97316] transition-transform group-hover:translate-x-0.5" />
+            <span>New run</span>
+            <ArrowRight className="w-3 h-3 text-[#737373]" aria-hidden="true" />
           </Link>
         </nav>
       </div>

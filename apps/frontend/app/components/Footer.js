@@ -69,7 +69,7 @@ export default function Footer({ onLaunchClick }) {
             <ul className="space-y-2 text-xs">
               <li>
                 <a
-                  href="https://github.com/TechWithAkash/agent-qa"
+                  href="https://github.com/TheLord19/Drishti_AI_CODE_APEX_3.0"
                   target="_blank"
                   rel="noreferrer"
                   className="hover:text-[#171717] transition-colors inline-flex items-center gap-1"
@@ -80,7 +80,7 @@ export default function Footer({ onLaunchClick }) {
               </li>
               <li>
                 <a
-                  href="https://github.com/TechWithAkash/agent-qa/tree/main/apps/backend"
+                  href="https://github.com/TheLord19/Drishti_AI_CODE_APEX_3.0/tree/main/apps/backend"
                   target="_blank"
                   rel="noreferrer"
                   className="hover:text-[#171717] transition-colors inline-flex items-center gap-1"
@@ -91,7 +91,7 @@ export default function Footer({ onLaunchClick }) {
               </li>
               <li>
                 <a
-                  href="https://github.com/TechWithAkash/agent-qa/tree/main/benchmarks/shoplite"
+                  href="https://github.com/TheLord19/Drishti_AI_CODE_APEX_3.0/tree/main/apps/shoplite"
                   target="_blank"
                   rel="noreferrer"
                   className="hover:text-[#171717] transition-colors inline-flex items-center gap-1"

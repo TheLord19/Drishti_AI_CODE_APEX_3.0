@@ -31,7 +31,7 @@ export default function FinalCTA({ onLaunchClick }) {
           </button>
 
           <a
-            href="https://github.com/TechWithAkash/agent-qa"
+            href="https://github.com/TheLord19/Drishti_AI_CODE_APEX_3.0"
             target="_blank"
             rel="noreferrer"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-6 py-3 rounded-lg bg-white border border-[#E5E5E5] text-[#171717] hover:bg-[#F5F5F4] transition-all text-sm font-medium shadow-2xs"
