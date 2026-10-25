@@ -5,17 +5,11 @@ import {
   Globe,
   Play,
   RotateCcw,
-  ShieldCheck,
-  ShieldAlert,
   AlertTriangle,
   ChevronDown,
   ChevronUp,
-  Terminal,
-  Activity,
   CheckCircle2,
   LockKeyhole,
-  Sliders,
-  ExternalLink,
 } from "lucide-react";
 
 export const PRESET_TARGETS = [
@@ -65,7 +59,7 @@ export const PRESET_TARGETS = [
   {
     id: "github",
     label: "GitHub Repository",
-    url: "https://github.com/TechWithAkash/agent-qa",
+    url: "https://github.com/TheLord19/Drishti_AI_CODE_APEX_3.0",
     description: `# GitHub Repository Audit Rules
 - Codebase Analysis: Discover routes, interactive components, forms, and dependencies.
 - Frontend Invariants: Verify build entrypoint, manifest, and accessible DOM anchors.
@@ -86,6 +80,10 @@ export const PRESET_TARGETS = [
   },
 ];
 
+const fieldLabel = "block text-xs font-medium text-fg mb-1.5";
+const smallLabel = "block text-[11px] font-medium text-fg mb-1";
+const numberInput = "w-full px-2.5 py-1.5 text-xs font-mono border border-line rounded-md bg-white";
+
 export default function Launchpad({
   targetUrl,
   setTargetUrl,
@@ -105,350 +103,295 @@ export default function Launchpad({
   const [maxConcurrency, setMaxConcurrency] = useState(3);
   const [replayAttempts, setReplayAttempts] = useState(3);
   const [viewportWidth, setViewportWidth] = useState(1280);
-  const [authEnabled, setAuthEnabled] = useState(true);
-  const [authEmail, setAuthEmail] = useState("demo@mywealthwise.in");
-  const [authPassword, setAuthPassword] = useState("DemoUser2026!QA");
+  // Off and empty by default: developers bring their own test account.
+  const [authEnabled, setAuthEnabled] = useState(false);
+  const [loginPath, setLoginPath] = useState("/login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
 
   return (
-    <section id="operation-workspace" className="py-20 lg:py-28 bg-[#FAFAF9] border-t border-[#E5E5E5]">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <div className="max-w-2xl mb-12">
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-medium bg-white text-[#737373] border border-[#E5E5E5] mb-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Autonomous QA Launchpad</span>
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-semibold text-[#171717] tracking-tight">
-            Start testing your application.
-          </h2>
-          <p className="mt-3 text-base text-[#737373] leading-relaxed">
-            Provide a target URL and behavioral guidelines. DRISHTI will explore the application, model core user journeys, validate failures through 3× clean replay, and export a pytest regression suite.
-          </p>
-        </div>
+    <section id="operation-workspace" className="py-16 bg-[#FAFAF9] border-t border-line">
+      <div className="mx-auto max-w-2xl px-4 sm:px-6">
+        <h2 className="text-2xl font-semibold tracking-tight text-fg">Start a QA run</h2>
+        <p className="mt-2 text-sm text-muted">
+          Paste a URL. DRISHTI explores the app, plans tests and reports bugs with evidence.
+        </p>
 
-        {/* Workspace Form Card */}
         <form
-          onSubmit={onSubmit}
-          className="bg-white border border-[#E5E5E5] rounded-xl shadow-xs overflow-hidden"
+          onSubmit={(e) =>
+            onSubmit(
+              e,
+              authEnabled ? { login_path: loginPath, username: authEmail, password: authPassword } : null
+            )
+          }
+          className="mt-6 bg-white border border-line rounded-lg overflow-hidden"
         >
-          {/* Target Preset Picker Bar */}
-          <div className="p-4 sm:p-5 border-b border-[#E5E5E5] bg-[#FAFAF9]/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-[#171717]">Preset Target:</span>
-              <span className="text-xs text-[#737373]">Select a validated benchmark or custom URL</span>
+          {/* Essentials: always visible */}
+          <div className="p-5 sm:p-6 space-y-5">
+            <div>
+              <label htmlFor="target-url" className={fieldLabel}>
+                Target URL
+              </label>
+              <div className="relative rounded-md border border-line bg-white focus-within:border-fg transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Globe className="w-4 h-4 text-muted" />
+                </div>
+                <input
+                  id="target-url"
+                  type="text"
+                  value={targetUrl}
+                  onChange={(e) => setTargetUrl(e.target.value)}
+                  placeholder="https://your-staging-app.com"
+                  className="block w-full pl-9 pr-3 py-2.5 text-sm font-mono text-fg placeholder-[#A3A3A3] focus:outline-none bg-transparent"
+                  required
+                />
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {PRESET_TARGETS.map((p) => {
-                const isSelected = activePreset === p.id;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => onPresetSelect(p.id)}
-                    className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
-                      isSelected
-                        ? "bg-[#171717] text-white shadow-2xs"
-                        : "bg-white text-[#525252] border border-[#E5E5E5] hover:bg-[#F5F5F4] hover:text-[#171717]"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                );
-              })}
+
+            <div>
+              <label htmlFor="target-description" className={fieldLabel}>
+                What should it focus on? <span className="font-normal text-muted">(optional)</span>
+              </label>
+              <textarea
+                id="target-description"
+                rows={4}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Key user journeys, validation rules, expected responses..."
+                className="block w-full p-3 text-xs font-mono text-fg border border-line rounded-md focus:border-fg focus:outline-none leading-relaxed"
+              />
             </div>
+
+            <label htmlFor="attestation-check" className="flex items-start gap-2.5 cursor-pointer text-xs text-muted">
+              <input
+                id="attestation-check"
+                type="checkbox"
+                checked={attestation}
+                onChange={(e) => setAttestation(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-[#D4D4D4] text-fg focus:ring-fg"
+              />
+              <span>
+                I own or am authorized to test this target, and it is not a production environment.
+              </span>
+            </label>
+
+            {error && (
+              <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+                <span>
+                  <span className="font-semibold">Run blocked: </span>
+                  {error}
+                </span>
+              </div>
+            )}
+
+            <button
+              id="start-run-btn"
+              type="submit"
+              disabled={loading || !attestation}
+              className={`w-full py-3 px-6 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                loading || !attestation
+                  ? "bg-[#E5E5E5] text-[#A3A3A3] cursor-not-allowed"
+                  : "bg-fg text-white hover:bg-black"
+              }`}
+            >
+              {loading ? (
+                <>
+                  <RotateCcw className="w-4 h-4 animate-spin" />
+                  <span>Starting run...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>Start run</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              aria-expanded={showAdvanced}
+              aria-controls="run-options"
+              className="mx-auto flex items-center gap-1 text-xs text-muted hover:text-fg transition-colors"
+            >
+              <span>{showAdvanced ? "Hide options" : "Show options"}</span>
+              {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
           </div>
 
-          {/* Form Body: 2 Columns */}
-          <div className="p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Left Column: Target & Testing Guidelines (7 Cols) */}
-            <div className="lg:col-span-7 space-y-6">
-              {/* Target URL Input */}
+          {/* Options: hidden until asked for */}
+          {showAdvanced && (
+            <div id="run-options" className="border-t border-line bg-[#FAFAF9] p-5 sm:p-6 space-y-6 text-xs">
               <div>
-                <label
-                  htmlFor="target-url"
-                  className="block text-xs font-semibold text-[#171717] mb-2 uppercase tracking-wider font-mono"
-                >
-                  Target Web URL or GitHub Repository
+                <span className={smallLabel}>Example targets</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESET_TARGETS.map((p) => {
+                    const isSelected = activePreset === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => onPresetSelect(p.id)}
+                        aria-pressed={isSelected}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                          isSelected
+                            ? "bg-fg text-white"
+                            : "bg-white text-[#525252] border border-line hover:text-fg"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="mode-select" className={smallLabel}>
+                  Execution safety mode
                 </label>
-                <div className="relative rounded-lg border border-[#E5E5E5] bg-white shadow-2xs focus-within:border-[#171717] focus-within:ring-1 focus-within:ring-[#171717]/10 transition-all">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#A3A3A3]">
-                    <Globe className="w-4 h-4 text-[#737373]" />
-                  </div>
-                  <input
-                    id="target-url"
-                    type="text"
-                    value={targetUrl}
-                    onChange={(e) => setTargetUrl(e.target.value)}
-                    placeholder="https://your-staging-app.com"
-                    className="block w-full pl-10 pr-4 py-2.5 text-xs text-[#171717] placeholder-[#A3A3A3] focus:outline-none bg-transparent"
-                    required
-                  />
-                </div>
-                <p className="mt-1.5 text-[11px] text-[#737373]">
-                  Chromium headless engine will initiate deterministic DOM frontier exploration on this URL.
-                </p>
-              </div>
-
-              {/* Testing Guidelines & Expectations */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label
-                    htmlFor="target-description"
-                    className="block text-xs font-semibold text-[#171717] uppercase tracking-wider font-mono"
-                  >
-                    Testing Guidelines & Behavioral Expectations
-                  </label>
-                  <span className="text-[11px] font-mono text-[#A3A3A3]">
-                    {description.length} chars
-                  </span>
-                </div>
-                <textarea
-                  id="target-description"
-                  rows={8}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe critical user journeys, validation rules, HTTP response expectations..."
-                  className="block w-full p-3.5 text-xs text-[#171717] border border-[#E5E5E5] rounded-lg shadow-2xs focus:border-[#171717] focus:ring-1 focus:ring-[#171717]/10 focus:outline-none font-mono leading-relaxed"
-                />
-                <p className="mt-1.5 text-[11px] text-[#737373]">
-                  DRISHTI parses these rules into Assertion DSL contracts to verify form validations, HTTP status codes, and deterministic routing.
-                </p>
-              </div>
-
-              {/* Collapsible Advanced Settings */}
-              <div className="pt-2 border-t border-[#E5E5E5]">
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-[#737373] hover:text-[#171717] transition-colors"
+                <select
+                  id="mode-select"
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                  className="block w-full px-3 py-2 border border-line rounded-md bg-white text-fg focus:border-fg focus:outline-none"
                 >
-                  <Sliders className="w-3.5 h-3.5 text-[#F97316]" />
-                  <span>Advanced Engine Parameters</span>
-                  {showAdvanced ? (
-                    <ChevronUp className="w-3 h-3 text-[#A3A3A3]" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3 text-[#A3A3A3]" />
-                  )}
-                </button>
+                  <option value="sandbox">Sandbox (exploration and non-destructive actions)</option>
+                  <option value="safe_exploration">Safe exploration (read-only navigation and form probing)</option>
+                </select>
+                <p className="mt-1.5 text-[11px] text-muted">
+                  {mode === "sandbox"
+                    ? "Explores, probes form validation boundaries and replays in isolated sandboxes."
+                    : "Limits the agent to GET requests, navigation and passive DOM inspection."}
+                </p>
+              </div>
 
-                {showAdvanced && (
-                  <div className="mt-4 p-4 rounded-lg bg-[#FAFAF9] border border-[#E5E5E5] grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-[#171717] mb-1">
-                        Replay Isolation Count
-                      </label>
+              <div className="space-y-2.5">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="flex items-center gap-2 font-medium text-fg">
+                    <LockKeyhole className="w-3.5 h-3.5 text-muted" />
+                    Authenticated crawl
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={authEnabled}
+                    onChange={(e) => setAuthEnabled(e.target.checked)}
+                    className="rounded border-line text-fg focus:ring-0 cursor-pointer"
+                  />
+                </label>
+                {authEnabled && (
+                  <>
+                    <p className="text-[11px] text-muted leading-relaxed">
+                      Sign in with a test account so the agent can reach pages behind your login. Use a test
+                      account, not a real user&apos;s. Credentials are kept in memory for this run only and are
+                      never shown or stored.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono">
                       <input
-                        type="number"
-                        min="2"
-                        max="5"
-                        value={replayAttempts}
-                        onChange={(e) => setReplayAttempts(Number(e.target.value))}
-                        className="w-full px-2.5 py-1.5 text-xs border border-[#E5E5E5] rounded bg-white"
+                        type="text"
+                        value={loginPath}
+                        onChange={(e) => setLoginPath(e.target.value)}
+                        placeholder="/login"
+                        aria-label="Login page path"
+                        title="Path of your login page, for example /login"
+                        required
+                        className="px-2.5 py-1.5 rounded-md border border-line bg-white text-fg"
                       />
-                      <span className="text-[10px] text-[#A3A3A3] mt-0.5 block">Default 3× fresh contexts</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-[#171717] mb-1">
-                        Crawl Concurrency
-                      </label>
                       <input
-                        type="number"
-                        min="1"
-                        max="6"
-                        value={maxConcurrency}
-                        onChange={(e) => setMaxConcurrency(Number(e.target.value))}
-                        className="w-full px-2.5 py-1.5 text-xs border border-[#E5E5E5] rounded bg-white"
+                        type="text"
+                        value={authEmail}
+                        onChange={(e) => setAuthEmail(e.target.value)}
+                        placeholder="Test email or username"
+                        aria-label="Test account email or username"
+                        autoComplete="off"
+                        required
+                        className="px-2.5 py-1.5 rounded-md border border-line bg-white text-fg"
                       />
-                      <span className="text-[10px] text-[#A3A3A3] mt-0.5 block">Parallel headless workers</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-[#171717] mb-1">
-                        Viewport Width
-                      </label>
                       <input
-                        type="number"
-                        min="375"
-                        max="1920"
-                        step="10"
-                        value={viewportWidth}
-                        onChange={(e) => setViewportWidth(Number(e.target.value))}
-                        className="w-full px-2.5 py-1.5 text-xs border border-[#E5E5E5] rounded bg-white"
+                        type="password"
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        placeholder="Password"
+                        aria-label="Test account password"
+                        autoComplete="new-password"
+                        required
+                        className="px-2.5 py-1.5 rounded-md border border-line bg-white text-fg"
                       />
-                      <span className="text-[10px] text-[#A3A3A3] mt-0.5 block">1280px standard desktop</span>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
-            </div>
 
-            {/* Right Column: Execution Mode, Attestation & Launch (5 Cols) */}
-            <div className="lg:col-span-5 flex flex-col justify-between space-y-6 lg:border-l lg:border-[#E5E5E5] lg:pl-8">
-              <div className="space-y-6">
-                {/* Execution Mode Selector */}
-                <div>
-                  <label
-                    htmlFor="mode-select"
-                    className="block text-xs font-semibold text-[#171717] mb-2 uppercase tracking-wider font-mono"
-                  >
-                    Execution Safety Mode
-                  </label>
-                  <select
-                    id="mode-select"
-                    value={mode}
-                    onChange={(e) => setMode(e.target.value)}
-                    className="block w-full px-3 py-2.5 text-xs text-[#171717] border border-[#E5E5E5] rounded-lg shadow-2xs focus:border-[#171717] focus:outline-none bg-white font-medium"
-                  >
-                    <option value="sandbox">Sandbox Mode (Exploration & Non-Destructive Actions)</option>
-                    <option value="safe_exploration">Safe Exploration (Read-Only Navigation & Form Probing)</option>
-                  </select>
-                  <p className="mt-1.5 text-[11px] text-[#737373]">
-                    {mode === "sandbox"
-                      ? "Allows autonomous exploration, form validation boundary probing, and deterministic replay in isolated sandboxes."
-                      : "Strictly limits autonomous agent actions to GET requests, navigation, and passive DOM inspection."}
-                  </p>
-                </div>
-
-                {/* Authenticated Application Crawl (Credentials Injection) */}
-                <div className="p-4 rounded-xl border border-[#E5E5E5] bg-[#FAFAF9]/90 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-[#171717]">
-                      <LockKeyhole className="w-3.5 h-3.5 text-[#F97316]" />
-                      <span>Authenticated Crawl &amp; Internal Route Access</span>
+              <div>
+                <span className={smallLabel}>Engine parameters</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label htmlFor="opt-replay" className="block text-[11px] text-muted mb-1">
+                      Replay count
                     </label>
                     <input
-                      type="checkbox"
-                      checked={authEnabled}
-                      onChange={(e) => setAuthEnabled(e.target.checked)}
-                      className="rounded border-[#E5E5E5] text-[#171717] focus:ring-0 cursor-pointer"
+                      id="opt-replay"
+                      type="number"
+                      min="2"
+                      max="5"
+                      value={replayAttempts}
+                      onChange={(e) => setReplayAttempts(Number(e.target.value))}
+                      className={numberInput}
                     />
                   </div>
-
-                  {authEnabled && (
-                    <div className="space-y-2.5 pt-1 animate-in fade-in duration-150">
-                      <p className="text-[11px] text-[#737373] leading-relaxed">
-                        Inject test account credentials to penetrate past the login wall and autonomously audit internal pages (<code className="font-mono text-zinc-800">/dashboard</code>, <code className="font-mono text-zinc-800">/budget</code>, <code className="font-mono text-zinc-800">/settings</code>).
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
-                        <input
-                          type="text"
-                          value={authEmail}
-                          onChange={(e) => setAuthEmail(e.target.value)}
-                          placeholder="Test Email (e.g. demo@mywealthwise.in)"
-                          className="px-2.5 py-1.5 rounded-lg border border-[#E5E5E5] bg-white text-zinc-900 text-xs"
-                        />
-                        <input
-                          type="password"
-                          value={authPassword}
-                          onChange={(e) => setAuthPassword(e.target.value)}
-                          placeholder="Password (e.g. ••••••••••••)"
-                          className="px-2.5 py-1.5 rounded-lg border border-[#E5E5E5] bg-white text-zinc-900 text-xs"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-mono">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                        <span>Pre-seeded for WealthWise &amp; ShopLite Test Benchmarks</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Authorization Attestation Row (SEC-1 Required) */}
-                <div className="p-4 rounded-lg bg-[#FAFAF9] border border-[#E5E5E5]">
-                  <label
-                    htmlFor="attestation-check"
-                    className="flex items-start gap-2.5 cursor-pointer text-xs"
-                  >
+                  <div>
+                    <label htmlFor="opt-concurrency" className="block text-[11px] text-muted mb-1">
+                      Crawl concurrency
+                    </label>
                     <input
-                      id="attestation-check"
-                      type="checkbox"
-                      checked={attestation}
-                      onChange={(e) => setAttestation(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded border-[#D4D4D4] text-[#171717] focus:ring-[#171717]"
+                      id="opt-concurrency"
+                      type="number"
+                      min="1"
+                      max="6"
+                      value={maxConcurrency}
+                      onChange={(e) => setMaxConcurrency(Number(e.target.value))}
+                      className={numberInput}
                     />
-                    <div>
-                      <span className="font-semibold text-[#171717] block">
-                        Authorization Attestation (SEC-1 Required)
-                      </span>
-                      <span className="text-[#737373] text-[11px] mt-0.5 block leading-relaxed">
-                        I confirm that I own or am explicitly authorized to test this target URL, and that this test run operates in a controlled non-production or staging environment.
-                      </span>
-                    </div>
-                  </label>
-                </div>
-
-                {/* Engine Telemetry Readiness Checklist */}
-                <div className="p-3.5 bg-white border border-[#E5E5E5] rounded-lg text-xs space-y-2">
-                  <div className="flex items-center justify-between text-[11px] pb-1.5 border-b border-[#F5F5F4] text-[#737373]">
-                    <span className="font-semibold text-[#171717]">Engine Environment Readiness</span>
-                    <span className="font-mono text-emerald-700">Ready</span>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-[#525252]">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      Chromium Browser Sandboxes
-                    </span>
-                    <span className="font-mono text-[#737373]">v1.50 Headless</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-[#525252]">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      Isolated Replay Contexts
-                    </span>
-                    <span className="font-mono text-[#737373]">Enabled (3×)</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-[#525252]">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      Pytest Codegen Emitter
-                    </span>
-                    <span className="font-mono text-[#737373]">Active</span>
+                  <div>
+                    <label htmlFor="opt-viewport" className="block text-[11px] text-muted mb-1">
+                      Viewport width
+                    </label>
+                    <input
+                      id="opt-viewport"
+                      type="number"
+                      min="375"
+                      max="1920"
+                      step="5"
+                      value={viewportWidth}
+                      onChange={(e) => setViewportWidth(Number(e.target.value))}
+                      className={numberInput}
+                    />
                   </div>
                 </div>
-
-                {/* Error Banner if any */}
-                {error && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
-                    <div>
-                      <span className="font-semibold block">Execution Blocked</span>
-                      <span>{error}</span>
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* Primary Action Button */}
-              <div className="pt-4 border-t border-[#E5E5E5]">
-                <button
-                  id="start-run-btn"
-                  type="submit"
-                  disabled={loading || !attestation}
-                  className={`w-full py-3.5 px-6 rounded-lg text-xs font-semibold tracking-tight transition-all flex items-center justify-center gap-2 shadow-xs ${
-                    loading || !attestation
-                      ? "bg-[#E5E5E5] text-[#A3A3A3] cursor-not-allowed"
-                      : "bg-[#171717] text-white hover:bg-black active:scale-[0.99]"
-                  }`}
-                >
-                  {loading ? (
-                    <>
-                      <RotateCcw className="w-4 h-4 animate-spin text-[#F97316]" />
-                      <span>Initializing Autonomous Session...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4 fill-current text-[#F97316]" />
-                      <span>Launch Autonomous QA Run</span>
-                    </>
-                  )}
-                </button>
-                <div className="mt-2 text-center text-[11px] text-[#A3A3A3]">
-                  Submits to FastAPI /api/runs &bull; Redirects to live telemetry dashboard
-                </div>
+              <div>
+                <span className={smallLabel}>Engine readiness</span>
+                <ul className="space-y-1.5 text-[11px] text-[#525252]">
+                  {[
+                    ["Chromium browser sandboxes", "v1.50 headless"],
+                    ["Isolated replay contexts", "3×"],
+                    ["Pytest codegen emitter", "active"],
+                  ].map(([name, value]) => (
+                    <li key={name} className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" aria-hidden="true" />
+                        {name}
+                      </span>
+                      <span className="font-mono text-muted">{value}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
-          </div>
+          )}
         </form>
       </div>
     </section>

@@ -2,18 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import {
-  ArrowRight,
-  Play,
-  RotateCcw,
-  CheckCircle2,
-  ShieldCheck,
-  Compass,
-  FileCode2,
-  Workflow,
-  Sparkles,
-} from "lucide-react";
+import { ArrowRight, Play, ChevronDown } from "lucide-react";
 
 import HeroBrowserDemo from "./components/HeroBrowserDemo";
 import Launchpad, { PRESET_TARGETS } from "./components/Launchpad";
@@ -22,10 +11,26 @@ import HowItWorks from "./components/HowItWorks";
 import Differentiators from "./components/Differentiators";
 import EvidenceShowcase from "./components/EvidenceShowcase";
 import BenchmarkSection from "./components/BenchmarkSection";
-import FinalCTA from "./components/FinalCTA";
 import Footer from "./components/Footer";
 
 const DEFAULT_PRESET = PRESET_TARGETS[0];
+
+// Secondary content stays on the page but starts collapsed, so a new visitor sees
+// the headline and the run form first and opens the rest only if they want it.
+function MoreSection({ title, summary, children }) {
+  return (
+    <details className="group border-t border-line bg-[#FAFAF9]">
+      <summary className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between gap-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <span>
+          <span className="block text-sm font-medium text-fg">{title}</span>
+          <span className="block text-xs text-muted mt-0.5">{summary}</span>
+        </span>
+        <ChevronDown className="w-4 h-4 shrink-0 text-muted transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      {children}
+    </details>
+  );
+}
 
 export default function LandingPage() {
   const router = useRouter();
@@ -65,7 +70,8 @@ export default function LandingPage() {
     }
   };
 
-  const handleSubmit = async (e) => {
+  // auth is { login_path, username, password } when the developer turned on authenticated crawl.
+  const handleSubmit = async (e, auth = null) => {
     e.preventDefault();
     if (!targetUrl.trim()) {
       setError("Please enter a valid target URL to test.");
@@ -93,6 +99,7 @@ export default function LandingPage() {
             confirmed: true,
             statement: "I own or am authorized to test this target and it is a non-production environment.",
           },
+          ...(auth ? { auth } : {}),
         }),
       });
 
@@ -114,99 +121,56 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="w-full bg-[#FAFAF9] text-[#171717] min-h-screen">
-      {/* =========================================================================
-          HERO SECTION — Linear x Vercel Aesthetic (Asymmetric 2-Column Grid)
-          ========================================================================= */}
-      <section className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-12 pb-16 lg:pt-18 lg:pb-24">
+    <div className="w-full bg-[#FAFAF9] text-fg min-h-screen">
+      {/* Hero: headline, one line of support, one primary action */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-12 pb-16 lg:pt-16 lg:pb-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 items-center">
-          {/* Left Column: Headline, Value Proposition & Actions (7 Cols) */}
           <div className="lg:col-span-7 space-y-6">
-            {/* Eyebrow Label */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-medium bg-white text-[#525252] border border-[#E5E5E5] shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-[#F97316] animate-pulse"></span>
-              <span className="font-semibold text-[#171717]">AUTONOMOUS QA ENGINE</span>
-              <span className="text-[#A3A3A3]">&bull;</span>
-              <span>IM-02 SPECIFICATION</span>
+            <div className="inline-flex items-center gap-2 text-xs font-mono text-muted">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+              Autonomous QA agent
             </div>
 
-            {/* Main Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight text-[#171717] leading-[1.08]">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.08]">
               Your next bug shouldn&apos;t reach production.
             </h1>
 
-            {/* Supporting Statement */}
-            <p className="text-base sm:text-lg text-[#525252] leading-relaxed max-w-2xl">
-              DRISHTI autonomously explores your web application, models real user journeys, and verifies defects with reproducible browser evidence across 3× fresh contexts.
+            <p className="text-base sm:text-lg text-[#525252] leading-relaxed max-w-xl">
+              DRISHTI explores your web app, tests real user journeys and reports bugs with browser evidence.
             </p>
 
-            {/* Workflow Points */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs text-[#525252]">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Zero pre-scripted tests</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>3× clean replay verification</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Pytest codegen for CI/CD</span>
-              </div>
-            </div>
+            <p className="text-xs text-muted">
+              No pre-written tests <span aria-hidden="true">·</span> 3× replay verification{" "}
+              <span aria-hidden="true">·</span> pytest export for CI
+            </p>
 
-            {/* Action Buttons */}
-            <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
+            <div className="pt-1 flex flex-col sm:flex-row sm:items-center gap-4">
               <button
                 type="button"
                 onClick={scrollToWorkspace}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#171717] text-white hover:bg-black transition-all text-xs sm:text-sm font-semibold shadow-xs group"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-md bg-fg text-white hover:bg-black transition-colors text-sm font-medium"
               >
-                <Play className="w-3.5 h-3.5 fill-current text-[#F97316]" />
-                <span>Launch a QA Run</span>
-                <ArrowRight className="w-3.5 h-3.5 text-[#A3A3A3] group-hover:translate-x-0.5 transition-transform" />
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Start a QA run</span>
               </button>
-
               <button
                 type="button"
                 onClick={scrollToHowItWorks}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-white border border-[#E5E5E5] text-[#171717] hover:bg-[#F5F5F4] transition-all text-xs sm:text-sm font-medium shadow-2xs"
+                className="inline-flex items-center justify-center gap-1 text-sm text-muted hover:text-fg transition-colors"
               >
-                <span>Explore the Workflow</span>
+                <span>How it works</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
-            </div>
-
-            {/* Trust Line */}
-            <div className="pt-3 text-[11px] text-[#A3A3A3] flex items-center gap-3">
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                Browser-based execution
-              </span>
-              <span>&bull;</span>
-              <span>Evidence-backed reports</span>
-              <span>&bull;</span>
-              <span>Reusable regression tests</span>
             </div>
           </div>
 
-          {/* Right Column: Realistic Browser Exploration Simulation (5 Cols) */}
           <div className="lg:col-span-5">
             <HeroBrowserDemo />
           </div>
         </div>
       </section>
 
-      {/* =========================================================================
-          SECTION 9: EXECUTION PIPELINE GUARANTEE (Timeline)
-          ========================================================================= */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-12">
-        <ExecutionTimeline />
-      </section>
-
-      {/* =========================================================================
-          SECTION 8: AUTONOMOUS QA LAUNCHPAD (Primary Product Workspace)
-          ========================================================================= */}
+      {/* The main action comes straight after the hero */}
       <Launchpad
         targetUrl={targetUrl}
         setTargetUrl={setTargetUrl}
@@ -223,34 +187,26 @@ export default function LandingPage() {
         activePreset={activePreset}
       />
 
-      {/* =========================================================================
-          SECTION 10: HOW IT WORKS (01 Discover, 02 Plan, 03 Verify, 04 Remember)
-          ========================================================================= */}
       <HowItWorks />
 
-      {/* =========================================================================
-          SECTION 11: TECHNICAL DIFFERENTIATION (3-Column Architecture)
-          ========================================================================= */}
-      <Differentiators />
+      <MoreSection title="The 10-stage pipeline" summary="What happens between submitting a URL and getting a report.">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-10">
+          <ExecutionTimeline />
+        </div>
+      </MoreSection>
 
-      {/* =========================================================================
-          SECTION 12: EVIDENCE & BUG REPORTING SHOWCASE
-          ========================================================================= */}
-      <EvidenceShowcase />
+      <MoreSection title="What makes it different" summary="Grounded planning, replay verification and generated tests.">
+        <Differentiators />
+      </MoreSection>
 
-      {/* =========================================================================
-          SECTION 13: STANDARDIZED BENCHMARK EVALUATION (ShopLite Suite)
-          ========================================================================= */}
-      <BenchmarkSection />
+      <MoreSection title="What a bug report looks like" summary="Evidence, reproduction steps and replay results.">
+        <EvidenceShowcase />
+      </MoreSection>
 
-      {/* =========================================================================
-          SECTION 14: FINAL CALL TO ACTION
-          ========================================================================= */}
-      <FinalCTA onLaunchClick={scrollToWorkspace} />
+      <MoreSection title="Benchmark" summary="Results on the ShopLite app with planted bugs.">
+        <BenchmarkSection />
+      </MoreSection>
 
-      {/* =========================================================================
-          SECTION 15: GLOBAL REDESIGNED FOOTER
-          ========================================================================= */}
       <Footer onLaunchClick={scrollToWorkspace} />
     </div>
   );
