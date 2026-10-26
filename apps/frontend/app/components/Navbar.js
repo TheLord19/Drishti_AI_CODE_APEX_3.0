@@ -91,6 +91,15 @@ export default function Navbar() {
           >
             Benchmarks
           </Link>
+          <Link
+            href="/lab"
+            className={`transition-colors hidden sm:inline-block ${
+              pathname === "/lab" ? "text-[#171717] font-semibold" : "text-[#737373] hover:text-[#171717]"
+            }`}
+            id="nav-lab"
+          >
+            Lab
+          </Link>
           <a
             href="https://github.com/TheLord19/Drishti_AI_CODE_APEX_3.0"
             target="_blank"
