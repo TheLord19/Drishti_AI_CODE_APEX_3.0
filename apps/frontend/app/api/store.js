@@ -5,6 +5,8 @@
 import * as cheerio from "cheerio";
 import { crawlWithPlaywright, captureRouteScreenshot } from "./playwright-service";
 import { runProbes, buildPytestFile } from "./probes";
+import { logEvent, saveJson, saveText, hydrateStore } from "./run-log";
+import { attachFixes, addCodeExamples, fixSummaryFor } from "./fixes";
 
 if (!globalThis.__drishtiStore) {
   globalThis.__drishtiStore = {
@@ -31,6 +33,13 @@ if (!globalStore.memories) globalStore.memories = new Map();
 if (!globalStore.healedChains) globalStore.healedChains = new Map();
 if (!globalStore.nlSteps) globalStore.nlSteps = new Map();
 if (!globalStore.namedTests) globalStore.namedTests = new Map();
+if (!globalStore.shots) globalStore.shots = new Map();
+
+// Reload runs saved on disk, once per server start.
+if (!globalStore.hydrated) {
+  hydrateStore(globalStore);
+  globalStore.hydrated = true;
+}
 
 export function getStore() {
   return globalStore;
@@ -75,6 +84,7 @@ export function createRun(runConfig) {
   globalStore.runs.set(runId, runDoc);
   globalStore.events.set(runId, []);
   globalStore.findings.set(runId, []);
+  saveJson(runId, "run.json", runDoc);
 
   // Launch the dynamic pipeline asynchronously. Credentials travel only in this call,
   // never in runDoc, so no API response can return them.
@@ -96,6 +106,7 @@ function emitEvent(runId, stage, type, message, data = {}) {
     ts: new Date().toISOString(),
   };
   events.push(ev);
+  logEvent(runId, ev);
   globalStore.events.set(runId, events);
 }
 
@@ -105,6 +116,7 @@ function updateRunStage(runId, stage, status) {
     run.stage = stage;
     run.status = status;
     run.updated_at = new Date().toISOString();
+    saveJson(runId, "run.json", run);
   }
 }
 
@@ -248,6 +260,7 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
       if (responseHeaders["cf-ray"] || responseHeaders["server"]?.toLowerCase().includes("cloudflare")) {
         detectedTech.push("Cloudflare");
       }
+      if (responseHeaders["x-powered-by"]?.includes("Express")) detectedTech.push("Express");
       if (detectedTech.length === 0) detectedTech.push("Modern Web Platform");
 
       // Headings (H1, H2, H3)
@@ -540,6 +553,8 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
       },
     ];
     globalStore.memories.set(runId, initialMemories);
+    saveJson(runId, "model.json", appModel);
+    saveJson(runId, "telemetry.json", globalStore.telemetry.get(runId));
 
     // Pre-populate interactive natural language test steps
     const h1Text = headings.find((h) => h.tag === "H1")?.text || pageTitle;
@@ -616,10 +631,9 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
           updateRunStage(runId, "S5", "executing");
           emitEvent(runId, "S5", "stage_started", `Stage S5: Running checks in fresh browser contexts`);
         }
-        if (stage === "S6" && stageNow !== "S6") {
-          updateRunStage(runId, "S6", "validating");
-        }
-        stageNow = stage === "S6" ? "S6" : stage;
+        // Confirmation events (S6) are logged as they happen, but the run stays in S5
+        // until every check has finished; S6 is entered once, at the end.
+        if (stage !== "S6") stageNow = stage;
       }
       emitEvent(runId, stage, type, message);
     };
@@ -630,6 +644,19 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
       log,
     });
     const findingsList = probe.findings;
+    attachFixes(findingsList);
+    // Evidence screenshots captured during checks are served separately, not inside the findings JSON.
+    for (const f of findingsList) {
+      if (f.screenshot) {
+        globalStore.shots.set(`${runId}/${f.id}`, f.screenshot);
+        saveText(runId, `shot_${f.id}.txt`, f.screenshot);
+        f.screenshot_url = `/api/runs/${runId}/shots/${f.id}`;
+      }
+      delete f.screenshot;
+    }
+    for (const t of probe.tests) {
+      if (t.status === "failed") t.fix_summary = fixSummaryFor(t.id);
+    }
     const failed = probe.tests.filter((t) => t.status === "failed").length;
     const skipped = probe.tests.filter((t) => t.status === "skipped").length;
 
@@ -653,6 +680,22 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
     }
     globalStore.namedTests.set(runId, probe.tests);
     globalStore.findings.set(runId, findingsList);
+    saveJson(runId, "tests.json", probe.tests);
+    saveJson(runId, "findings.json", findingsList);
+    saveJson(runId, "run.json", run);
+
+    // Suggested fixes: rule-based now; Groq code examples added below without blocking the report.
+    const fixRun = addCodeExamples(findingsList, detectedTech).then((res) => {
+      saveJson(runId, "findings.json", findingsList);
+      emitEvent(
+        runId,
+        "S8",
+        "fixes_ready",
+        res.ok
+          ? `Suggested fixes ready for ${findingsList.length} defects; code examples by Groq (${res.model})`
+          : `Suggested fixes ready for ${findingsList.length} defects (rule-based; Groq code examples unavailable: ${res.error})`
+      );
+    });
 
     // -------------------------------------------------------------------------
     // S8-S9: Reports & pytest file built from the named tests
@@ -663,12 +706,14 @@ async function executeDynamicPipeline(runId, targetUrl, config) {
     const tailoredPytestCode = buildPytestFile(targetUrl, probe.tests);
 
     globalStore.generatedTests.set(runId, tailoredPytestCode);
+    saveText(runId, "test_suite.py", tailoredPytestCode);
 
     await sleep(600);
     updateRunStage(runId, "S9", "generating_tests");
     emitEvent(runId, "S9", "stage_completed", `Stage S9: Generated standalone pytest-playwright regression tests for ${hostname}`);
 
     await sleep(600);
+    await fixRun; // Groq code examples (bounded by a timeout) finish before the run is marked complete
     updateRunStage(runId, "S10", "completed");
     emitEvent(runId, "S10", "stage_completed", `Stage S10: Self-verification complete. Run finished with status: COMPLETED.`);
   } catch (err) {

@@ -2,6 +2,7 @@
 // (pages, links, forms, fields); there are no site names, routes or known-bug lists.
 // Each failing check is replayed in fresh browser contexts and reports how often it reproduced.
 import { getBrowser } from "./playwright-service";
+import { surveyFlow, rescanStep, memoryCheck, oddInputFlow, doubleSubmitCheck } from "./flow";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 DRISHTI-AI-Probe/1.0";
@@ -107,10 +108,26 @@ function snapshotPage() {
       return { action: new URL(f.getAttribute("action") || location.pathname, location.href).pathname, field: input.name, selector: cssPath(input) };
     })
     .filter(Boolean);
+  // Other forms (contact, enquiry, newsletter): no password field, and either a textarea,
+  // a POST method, or at least two visible fields. One-box GET search forms are excluded.
+  const otherForms = Array.from(document.forms)
+    .map((f, index) => {
+      if (f.querySelector("input[type='password']")) return null;
+      const fields = Array.from(f.querySelectorAll("input, textarea, select")).filter(
+        (el) => !["hidden", "submit", "button", "image", "reset"].includes((el.type || "").toLowerCase()) && el.offsetParent !== null
+      );
+      const isPost = (f.getAttribute("method") || "").toLowerCase() === "post";
+      const hasTextarea = !!f.querySelector("textarea");
+      if (!fields.length || !(hasTextarea || isPost || fields.length >= 2)) return null;
+      const label = (f.getAttribute("aria-label") || f.id || f.getAttribute("name") || f.querySelector("h1,h2,h3,legend")?.innerText || "form").trim().slice(0, 40);
+      return { index, label, fieldCount: fields.length, hasEmail: !!f.querySelector("input[type='email'], input[name*='email' i]") };
+    })
+    .filter(Boolean);
   return {
     title: document.title,
     links,
     getForms,
+    otherForms,
     kind,
     emailSelector: cssPath(emailEl),
     emailType: emailEl ? emailEl.type : null,
@@ -255,14 +272,98 @@ async function submitQuantity(url, qtySelector, value) {
   }
 }
 
-async function replay(attempt, first) {
-  let reproduced = first ? 1 : 0;
-  for (let i = 1; i < REPLAYS; i++) {
-    try {
-      if (await attempt()) reproduced++;
-    } catch (e) {}
+// Fill a non-login form and submit it. `mode`: "empty" | "bad_email" | "odd" | "valid".
+// Reports whether the site accepted it and whether the user saw any response.
+const ODD_TEXT = `DRISHTI QA ( ) [ ] * + ? \\ ' " < > % 😀 ✓ — ` + "x".repeat(5000);
+async function submitForm(url, formIndex, mode) {
+  const ctx = await newContext();
+  const page = await ctx.newPage();
+  const seen = watch(page);
+  let dialog = null;
+  page.on("dialog", (d) => {
+    dialog = d.message();
+    d.dismiss().catch(() => {});
+  });
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
+    await page.waitForTimeout(400);
+    const form = page.locator("form").nth(formIndex);
+    if (!(await form.count())) return { ok: false, reason: "form not found" };
+    const fields = form.locator("input, textarea, select");
+    let emailSelector = null;
+    if (mode !== "empty") {
+      for (let i = 0; i < (await fields.count()); i++) {
+        const el = fields.nth(i);
+        if (!(await el.isVisible().catch(() => false))) continue;
+        const info = await el.evaluate((n) => ({
+          tag: n.tagName.toLowerCase(),
+          type: (n.type || "").toLowerCase(),
+          name: `${n.name || ""} ${n.id || ""} ${n.getAttribute("placeholder") || ""}`.toLowerCase(),
+          required: n.required,
+        }));
+        if (["hidden", "submit", "button", "image", "reset", "file"].includes(info.type)) continue;
+        const isEmail = info.type === "email" || /e-?mail/.test(info.name);
+        if (isEmail && !emailSelector) emailSelector = await el.evaluate((n) => (n.id ? `#${n.id}` : n.name ? `[name="${n.name}"]` : n.tagName.toLowerCase()));
+        if (info.tag === "select") {
+          await el.selectOption({ index: 1 }).catch(() => {});
+        } else if (info.type === "checkbox" || info.type === "radio") {
+          if (info.required) await el.check().catch(() => {});
+        } else if (isEmail) {
+          await el.fill(mode === "bad_email" ? "drishti-qa-no-at-sign" : "drishti.qa.form@example.com").catch(() => {});
+        } else if (info.type === "tel") {
+          await el.fill("5551234567").catch(() => {});
+        } else if (info.type === "number") {
+          await el.fill("1").catch(() => {});
+        } else if (info.type === "url") {
+          await el.fill("https://example.com").catch(() => {});
+        } else if (info.type === "date") {
+          await el.fill("2026-01-15").catch(() => {});
+        } else {
+          await el.fill(mode === "odd" ? ODD_TEXT : info.tag === "textarea" ? "DRISHTI QA test message. Please ignore." : "Drishti QA").catch(() => {});
+        }
+      }
+    }
+    // Did the browser itself block submission (required / type=email)?
+    const browserBlocked = await form.evaluate((f) => !f.checkValidity()).catch(() => false);
+    const textBefore = await page.evaluate(() => document.body.innerText).catch(() => "");
+    const startUrl = page.url();
+    const writesBefore = seen.writes.length;
+    const submit = form.locator("button[type='submit'], input[type='submit'], button:not([type])").first();
+    if (await submit.count()) await submit.click({ timeout: 5000 }).catch(() => {});
+    else await form.evaluate((f) => f.requestSubmit()).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    const writes = seen.writes.slice(writesBefore);
+    const navigated = page.url() !== startUrl;
+    const textAfter = await page.evaluate(() => document.body.innerText).catch(() => "");
+    const added = textAfter.length !== textBefore.length || textAfter !== textBefore;
+    return {
+      ok: true,
+      browserBlocked,
+      writes,
+      serverErrors: seen.serverErrors,
+      // A failed response (4xx/5xx) means refused, even if the browser moved to an error page.
+      accepted:
+        !browserBlocked &&
+        !writes.some((w) => w.status >= 400) &&
+        (navigated || writes.some((w) => w.status >= 200 && w.status < 400)),
+      feedback: navigated || added || !!dialog,
+      dialog,
+      emailSelector,
+    };
+  } catch (e) {
+    return { ok: false, reason: e.message.split("\n")[0] };
+  } finally {
+    await ctx.close().catch(() => {});
   }
-  return reproduced;
+}
+
+// Replays run side by side, each in its own fresh browser context.
+async function replay(attempt, first) {
+  const results = await Promise.all(
+    Array.from({ length: REPLAYS - 1 }, () => Promise.resolve().then(attempt).catch(() => false))
+  );
+  return (first ? 1 : 0) + results.filter(Boolean).length;
 }
 
 const pin = (selector, description, screen) => ({ selector, description, screen, x: 25, y: 35, w: 50, h: 12 });
@@ -306,6 +407,7 @@ export async function runProbes(targetUrl, { auth = null, safeMode = false, log 
     signupPage && "Sign-up checks",
     (loginPage || auth) && "Sign-in checks",
     qtyPage && "Quantity validation",
+    okPages.some((p) => p.snap.otherForms?.length && !p.snap.kind) && "Form checks",
     "Security headers",
   ].filter(Boolean);
   log("S4", "plan_ready", `Planned ${planned.length} check groups from what the site offers: ${planned.join("; ")}`);
@@ -514,7 +616,7 @@ export async function runProbes(targetUrl, { auth = null, safeMode = false, log 
             severity: "high",
             replay_rate: `${dupRep}/${REPLAYS}`,
             classification_reason: `The second sign-up with an existing address returned HTTP ${err.status} instead of a friendly message.`,
-            anomaly_location: pin("form", "Duplicate registration causes a server error", signupPage.path),
+            anomaly_location: pin(field, "Duplicate registration causes a server error", signupPage.path),
             trigger_steps: [`Sign up at ${url} with a new email`, "Sign up again with the same email"],
             expected: "A message such as 'already registered' (4xx), no server error",
             actual: `${err.method} ${pathOf(err.url)} returned HTTP ${err.status}`,
@@ -748,6 +850,189 @@ export async function runProbes(targetUrl, { auth = null, safeMode = false, log 
     }
   }
 
+  // ---- 6b. Other forms (contact, enquiry, newsletter) -----------------------------------------
+  const formTargets = [];
+  for (const p of okPages) {
+    if (p.snap.kind) continue; // sign-up and sign-in pages have their own checks
+    for (const f of p.snap.otherForms || []) {
+      if (formTargets.length < 2) formTargets.push({ path: p.path, ...f });
+    }
+  }
+  for (const [n, ft] of formTargets.entries()) {
+    const url = abs(ft.path);
+    const suffix = n ? `_${n + 1}` : "";
+    const where = `the "${ft.label}" form on ${ft.path}`;
+    const pyForm = `page.locator("form").nth(${ft.index})`;
+    if (safeMode) {
+      addTest({
+        id: `test_form_checks${suffix}`,
+        name: `Form checks (${ft.path})`,
+        category: "Forms",
+        route: ft.path,
+        status: "skipped",
+        note: "safe mode: no forms submitted",
+        steps: [],
+        code: "",
+      });
+      continue;
+    }
+    const formFinding = (scenario, title, severity, reproduced, r, extra) => {
+      findings.push({
+        id: `FORM${n + 1}-${scenario.replace("test_form_", "").replace("test_", "").toUpperCase()}`,
+        scenario_id: scenario,
+        title,
+        journey: "Forms",
+        category: "Form Contract",
+        severity,
+        replay_rate: `${reproduced}/${REPLAYS}`,
+        classification_reason: `${title} (${where}).`,
+        anomaly_location: pin(`form >> nth=${ft.index}`, title, ft.path),
+        trigger_steps: [`Go to ${url}`, ...extra.steps],
+        expected: extra.expected,
+        actual: extra.actual,
+        evidence: r.writes?.length ? r.writes.map((w) => `${w.method} ${pathOf(w.url)} → ${w.status}`).join(" • ") : extra.evidence || "No request; page state observed in the browser",
+      });
+    };
+
+    // 1. Empty submit must not be accepted.
+    const emptyAttempt = async () => {
+      const r = await submitForm(url, ft.index, "empty");
+      return r.ok && r.accepted ? r : false;
+    };
+    const emptyFirst = await emptyAttempt();
+    const emptyRep = emptyFirst ? await replay(async () => !!(await emptyAttempt()), true) : 0;
+    if (emptyRep >= 2) {
+      formFinding("test_form_required", `Empty ${ft.label} form is accepted`, "medium", emptyRep, emptyFirst, {
+        steps: ["Leave every field empty", "Submit"],
+        expected: "Submission is blocked with a message about the required fields",
+        actual: "The empty form was accepted",
+      });
+    }
+    addTest({
+      id: `test_form_required${suffix}`,
+      name: `Empty form is refused (${ft.path})`,
+      category: "Forms",
+      route: ft.path,
+      status: emptyRep >= 2 ? "failed" : "passed",
+      replay: emptyRep >= 2 ? `${emptyRep}/${REPLAYS}` : null,
+      steps: [`Open ${ft.path}`, `Submit ${where} with every field empty`, "Expect it to be blocked"],
+      code: `def test_form_required${suffix}(page: Page):
+    """An empty form must not be accepted."""
+    writes = []
+    page.on("response", lambda r: writes.append(r.status) if r.request.method != "GET" else None)
+    page.goto(BASE_URL + ${pyStr(ft.path)})
+    form = ${pyForm}
+    form.locator("button[type='submit'], input[type='submit'], button:not([type])").first.click()
+    page.wait_for_timeout(1500)
+    assert not any(200 <= s < 400 for s in writes), "Empty form was accepted"
+`,
+    });
+
+    // 2. A malformed email must be refused.
+    if (ft.hasEmail) {
+      const badAttempt = async () => {
+        const r = await submitForm(url, ft.index, "bad_email");
+        return r.ok && r.accepted ? r : false;
+      };
+      const badFirst = await badAttempt();
+      const badRep = badFirst ? await replay(async () => !!(await badAttempt()), true) : 0;
+      if (badRep >= 2) {
+        formFinding("test_form_email", `${ft.label} form accepts an email without '@'`, "medium", badRep, badFirst, {
+          steps: ["Fill the form with valid values", 'Enter "drishti-qa-no-at-sign" as the email', "Submit"],
+          expected: "The form is refused with an email error",
+          actual: "The form was accepted with a malformed email",
+        });
+      }
+      addTest({
+        id: `test_form_email${suffix}`,
+        name: `Form rejects a malformed email (${ft.path})`,
+        category: "Forms",
+        route: ft.path,
+        status: badRep >= 2 ? "failed" : "passed",
+        replay: badRep >= 2 ? `${badRep}/${REPLAYS}` : null,
+        steps: [`Open ${ft.path}`, "Fill the form, with an email without '@'", "Submit", "Expect it to be refused"],
+        code: "",
+      });
+    }
+
+    // Control: a normal valid submission. Used by checks 3 and 4.
+    const valid = await submitForm(url, ft.index, "valid");
+
+    // 3. Odd input must not crash the server (hidden failure). Only meaningful when a normal
+    // submission does not itself return a server error.
+    const oddAttempt = async () => {
+      const r = await submitForm(url, ft.index, "odd");
+      return r.ok && r.serverErrors.length ? r : false;
+    };
+    const controlClean = valid.ok && !valid.serverErrors.length;
+    const oddFirst = controlClean ? await oddAttempt() : false;
+    const oddRep = oddFirst ? await replay(async () => !!(await oddAttempt()), true) : 0;
+    if (oddRep >= 2) {
+      const err = oddFirst.serverErrors[0];
+      formFinding("test_odd_input", `${ft.label} form crashes on symbols, emoji or long text (HTTP ${err.status})`, "high", oddRep, oddFirst, {
+        steps: ["Fill text fields with symbols ( ) [ ] * + ?, emoji and 5,000 characters", "Submit"],
+        expected: "The server accepts or refuses the input cleanly (no 5xx)",
+        actual: `${err.method} ${pathOf(err.url)} returned HTTP ${err.status}`,
+        evidence: `${err.method} ${err.url} → ${err.status}`,
+      });
+    }
+    addTest({
+      id: `test_odd_input${suffix}`,
+      name: `Form survives symbols, emoji and long text (${ft.path})`,
+      category: "Hidden failures",
+      route: ft.path,
+      status: !controlClean ? "skipped" : oddRep >= 2 ? "failed" : "passed",
+      replay: oddRep >= 2 ? `${oddRep}/${REPLAYS}` : null,
+      note: !controlClean ? "a normal submission already fails on the server, so this is inconclusive" : null,
+      steps: [`Open ${ft.path}`, "Fill text fields with symbols, emoji and 5,000 characters", "Submit", "Fail on any 5xx"],
+      code: "",
+    });
+
+    // 4. A valid submission must tell the user something happened (hidden failure).
+    if (!valid.ok || !valid.accepted) {
+      addTest({
+        id: `test_form_feedback${suffix}`,
+        name: `Form confirms a valid submission (${ft.path})`,
+        category: "Hidden failures",
+        route: ft.path,
+        status: "skipped",
+        note: valid.ok ? "a valid submission was not accepted (captcha or extra steps), so this is inconclusive" : valid.reason,
+        steps: [],
+        code: "",
+      });
+    } else {
+      let fbRep = 0;
+      if (!valid.feedback) {
+        fbRep = await replay(async () => {
+          const r = await submitForm(url, ft.index, "valid");
+          return r.ok && r.accepted && !r.feedback;
+        }, true);
+        if (fbRep >= 2) {
+          formFinding("test_form_feedback", `${ft.label} form gives no confirmation after sending`, "low", fbRep, valid, {
+            steps: ["Fill the form with valid values", "Submit"],
+            expected: "A success message, thank-you page or other visible confirmation",
+            actual: "The request succeeded but the page did not change",
+          });
+        }
+      }
+      addTest({
+        id: `test_form_feedback${suffix}`,
+        name: `Form confirms a valid submission (${ft.path})`,
+        category: "Hidden failures",
+        route: ft.path,
+        status: fbRep >= 2 ? "failed" : "passed",
+        replay: fbRep >= 2 ? `${fbRep}/${REPLAYS}` : null,
+        note: valid.dialog ? `confirmation shown as a pop-up: "${valid.dialog.slice(0, 60)}"` : null,
+        steps: [`Open ${ft.path}`, "Fill the form with valid values", "Submit", "Expect a visible confirmation"],
+        code: "",
+      });
+    }
+    log("S5", "form_checked", `Checked ${where}`);
+  }
+
+  // ---- 6c. Multi-step flows (wizards, checkouts, bookings, online tests) --------------------
+  await runFlowChecks(targetUrl, { safeMode, log, addTest, findings });
+
   // ---- 7. Security headers (hardening note, low severity) ------------------------------------
   try {
     const r = await fetch(targetUrl, { headers: { "User-Agent": UA } });
@@ -787,6 +1072,214 @@ export async function runProbes(targetUrl, { auth = null, safeMode = false, log 
   } catch (e) {}
 
   return { tests, findings, pages: all.map((p) => p.path), authRequired };
+}
+
+// Checks that need the flow walker (flow.js). A flow is followed by pressing forward buttons
+// (Start, Continue, Next, Submit...) from the start URL; it needs at least 3 steps to count.
+async function runFlowChecks(targetUrl, { safeMode, log, addTest, findings }) {
+  const FLOW_TESTS = [
+    ["test_visible_text", "Every step's text is readable", "Flows"],
+    ["test_editable_fields", "Fields accept typing", "Flows"],
+    ["test_step_memory", "Answers survive Next and Previous", "Flows"],
+    ["test_refresh_memory", "Saved answers survive a page refresh", "Hidden failures"],
+    ["test_flow_odd_input", "Steps save symbols, emoji and long text", "Hidden failures"],
+    ["test_double_submit", "Double-click on the final button submits once", "Hidden failures"],
+  ];
+  const skipAll = (note) => FLOW_TESTS.forEach(([id, name, category]) => addTest({ id, name, category, route: "/", status: "skipped", note, steps: [], code: "" }));
+  if (safeMode) return skipAll("safe mode: flows are not walked");
+
+  log("S5", "flow_started", `Walking the main flow from ${pathOf(targetUrl) || "/"} by pressing its forward buttons`);
+  let survey;
+  try {
+    survey = await surveyFlow(targetUrl);
+  } catch (e) {
+    return skipAll(`could not walk the flow: ${e.message.split("\n")[0]}`);
+  }
+  const steps = survey.steps;
+  if (steps.length < 3) return; // no multi-step flow on this site: these checks do not apply
+  log("S5", "flow_mapped", `Flow has ${steps.length} steps: ${steps.map((s) => s.action || "(end)").join(" → ")}`);
+  const stepName = (s) => `step ${s.index + 1} (${s.path}${s.index ? `, after "${steps[s.index - 1]?.action}"` : ""})`;
+  const howToReach = (s) => [`Open ${targetUrl}`, ...steps.slice(0, s.index).map((x) => `Fill the step and press "${x.action}"`)];
+
+  // Per-step scans: invisible text and fields that ignore typing.
+  for (const [kind, id, name, severity] of [
+    ["invisible", "test_visible_text", "Every step's text is readable", "high"],
+    ["uneditable", "test_editable_fields", "Fields accept typing", "high"],
+  ]) {
+    const first = survey.problems[kind][0];
+    let rep = 0;
+    if (first) rep = await replay(() => rescanStep(targetUrl, first.step, kind), true);
+    if (rep >= 2) {
+      const s = steps[first.step];
+      const isInvisible = kind === "invisible";
+      findings.push({
+        id: isInvisible ? "FLOW-INVISIBLE" : "FLOW-UNEDITABLE",
+        scenario_id: id,
+        title: isInvisible
+          ? `Text is practically invisible on ${stepName(s)}: "${first.text.slice(0, 50)}"`
+          : `"${first.label || first.selector}" ignores typing on ${stepName(s)}`,
+        journey: "Flows",
+        category: isInvisible ? "Visibility Invariant" : "Input Contract",
+        severity,
+        replay_rate: `${rep}/${REPLAYS}`,
+        classification_reason: isInvisible
+          ? `Text contrast is ${first.ratio}:1 against its background (readable text needs at least 4.5:1).`
+          : "The field looks editable, but typed characters never appear in it.",
+        anomaly_location: pin(first.selector, isInvisible ? "Invisible text" : "Field ignores typing", s.path),
+        trigger_steps: [...howToReach(s), isInvisible ? "Read the step's text" : `Click "${first.label || first.selector}" and type`],
+        expected: isInvisible ? "All text is clearly readable" : "Typed characters appear in the field",
+        actual: isInvisible ? `Contrast ratio ${first.ratio}:1; the text cannot be seen` : "Nothing is typed into the field",
+        evidence: isInvisible ? `${first.selector}: "${first.text.slice(0, 60)}" at ${first.ratio}:1` : `${first.selector} unchanged after typing "qa"`,
+        screenshot: survey.problems[`${kind}Shot`] || null,
+      });
+    }
+    addTest({
+      id,
+      name,
+      category: "Flows",
+      route: first ? steps[first.step].path : "/",
+      status: rep >= 2 ? "failed" : "passed",
+      replay: rep >= 2 ? `${rep}/${REPLAYS}` : null,
+      note: `${steps.length} steps checked`,
+      steps: ["Walk the flow step by step", kind === "invisible" ? "Measure text contrast on every step" : "Type into every editable field on every step"],
+      code: "",
+    });
+  }
+
+  // Memory across Next/Previous, and across a refresh.
+  const memStep = steps.find((s, i) => i > 0 && s.fields.answer && steps[i + 1]?.hasBack && s.action);
+  for (const [id, name, reload, category] of [
+    ["test_step_memory", "Answers survive Next and Previous", false, "Flows"],
+    ["test_refresh_memory", "Saved answers survive a page refresh", true, "Hidden failures"],
+  ]) {
+    if (!memStep) {
+      addTest({ id, name, category, route: "/", status: "skipped", note: "no step with a Previous or Back control", steps: [], code: "" });
+      continue;
+    }
+    const attempt = async () => {
+      const r = await memoryCheck(targetUrl, memStep.index, memStep.fields.answer, { reload });
+      return r.ok && !r.kept ? r : r.ok ? false : r;
+    };
+    const first = await attempt();
+    if (first && first.ok === false) {
+      addTest({ id, name, category, route: memStep.path, status: "skipped", note: first.reason, steps: [], code: "" });
+      continue;
+    }
+    const rep = first ? await replay(async () => !!(await attempt())?.ok, true) : 0;
+    if (rep >= 2) {
+      findings.push({
+        id: reload ? "FLOW-REFRESH" : "FLOW-MEMORY",
+        scenario_id: id,
+        title: reload
+          ? `Saved answer is lost after a page refresh (${stepName(memStep)})`
+          : `Answer is lost after "${memStep.action}" then Previous (${stepName(memStep)})`,
+        journey: "Flows",
+        category: "State Invariant",
+        severity: "high",
+        replay_rate: `${rep}/${REPLAYS}`,
+        classification_reason: reload
+          ? "An answer saved before the refresh is empty when the user goes back to it."
+          : "An answer saved with the forward button is empty when the user goes back to it.",
+        anomaly_location: pin(memStep.fields.answer.selector, "Answer not kept", memStep.path),
+        trigger_steps: [
+          ...howToReach(memStep),
+          "Answer this step",
+          `Press "${memStep.action}"`,
+          ...(reload ? ["Refresh the page"] : []),
+          "Press Previous",
+        ],
+        expected: "The answer is still selected or filled in",
+        actual: `The answer is empty (expected "${first.expected}", found "${first.actual ?? ""}")`,
+        evidence: `${memStep.fields.answer.selector}: expected "${first.expected}", found "${first.actual ?? ""}"`,
+        screenshot: first.shot || null,
+      });
+    }
+    addTest({
+      id,
+      name,
+      category,
+      route: memStep.path,
+      status: rep >= 2 ? "failed" : "passed",
+      replay: rep >= 2 ? `${rep}/${REPLAYS}` : null,
+      steps: ["Answer a step", `Press "${memStep.action}"`, ...(reload ? ["Refresh the page"] : []), "Press Previous", "Expect the answer to still be there"],
+      code: "",
+    });
+  }
+
+  // Odd input through the whole flow.
+  const oddFirst = await oddInputFlow(targetUrl, 1).catch(() => null);
+  const oddRep = oddFirst ? await replay(async () => !!(await oddInputFlow(targetUrl, 1).catch(() => null)), true) : 0;
+  if (oddRep >= 2) {
+    const s = steps[oddFirst.step] || { index: oddFirst.step, path: oddFirst.path };
+    findings.push({
+      id: "FLOW-ODD",
+      scenario_id: "test_flow_odd_input",
+      title: `Saving symbols, quotes or emoji crashes the server on ${stepName(s)} (HTTP ${oddFirst.error.status})`,
+      journey: "Flows",
+      category: "Server Error Invariant",
+      severity: "high",
+      replay_rate: `${oddRep}/${REPLAYS}`,
+      classification_reason: "A text answer containing quotes, symbols and emoji returned a server error.",
+      anomaly_location: pin(s.fields?.answer?.selector || "body", "Input crashes the save", s.path),
+      trigger_steps: [...howToReach(s), "Type text containing ( ) [ ] * + ? \\ ' \" < > and emoji", `Press "${s.action || "the forward button"}"`],
+      expected: "The text is saved, or refused with a message",
+      actual: `${oddFirst.error.method} ${pathOf(oddFirst.error.url)} returned HTTP ${oddFirst.error.status}`,
+      evidence: `${oddFirst.error.method} ${oddFirst.error.url} → ${oddFirst.error.status}`,
+      screenshot: oddFirst.shot || null,
+    });
+  }
+  addTest({
+    id: "test_flow_odd_input",
+    name: "Steps save symbols, emoji and long text",
+    category: "Hidden failures",
+    route: oddFirst ? oddFirst.path : steps[1]?.path || "/",
+    status: oddRep >= 2 ? "failed" : "passed",
+    replay: oddRep >= 2 ? `${oddRep}/${REPLAYS}` : null,
+    steps: ["Walk the flow typing symbols, quotes, emoji and long text into every text field", "Fail on any 5xx"],
+    code: "",
+  });
+
+  // Double-click on the button that ends the flow.
+  const last = steps[steps.length - 1];
+  const finalStep = !last.action ? steps[steps.length - 2] : null;
+  if (!finalStep?.action) {
+    addTest({ id: "test_double_submit", name: "Double-click on the final button submits once", category: "Hidden failures", route: "/", status: "skipped", note: "the flow has no final button", steps: [], code: "" });
+  } else {
+    const dblAttempt = async () => {
+      const r = await doubleSubmitCheck(targetUrl, finalStep.index);
+      return r.repeated ? { ...r.repeated, shot: r.shot } : null;
+    };
+    const firstDbl = await dblAttempt().catch(() => null);
+    const dblRep = firstDbl ? await replay(async () => !!(await dblAttempt().catch(() => null)), true) : 0;
+    if (dblRep >= 2) {
+      findings.push({
+        id: "FLOW-DOUBLE",
+        scenario_id: "test_double_submit",
+        title: `Double-clicking "${finalStep.action}" submits twice`,
+        journey: "Flows",
+        category: "Idempotency Invariant",
+        severity: "high",
+        replay_rate: `${dblRep}/${REPLAYS}`,
+        classification_reason: `A double-click on "${finalStep.action}" sent ${firstDbl.request} ${firstDbl.times} times and the server accepted each.`,
+        anomaly_location: pin(`button:has-text("${finalStep.action}")`, "Submits twice", finalStep.path),
+        trigger_steps: [...howToReach(finalStep), `Double-click "${finalStep.action}"`],
+        expected: "One submission: the button is disabled or the server refuses the repeat",
+        actual: `${firstDbl.request} accepted ${firstDbl.times} times`,
+        evidence: `${firstDbl.request} × ${firstDbl.times}, all 2xx`,
+        screenshot: firstDbl.shot || null,
+      });
+    }
+    addTest({
+      id: "test_double_submit",
+      name: "Double-click on the final button submits once",
+      category: "Hidden failures",
+      route: finalStep.path,
+      status: dblRep >= 2 ? "failed" : "passed",
+      replay: dblRep >= 2 ? `${dblRep}/${REPLAYS}` : null,
+      steps: [`Walk to the last step`, `Double-click "${finalStep.action}"`, "Expect a single accepted request"],
+      code: "",
+    });
+  }
 }
 
 /** Build one runnable pytest file from the named tests. */

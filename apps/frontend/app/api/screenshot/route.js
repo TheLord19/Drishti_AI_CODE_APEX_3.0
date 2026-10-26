@@ -9,6 +9,23 @@ export async function GET(req) {
     const action = searchParams.get("action") || "view";
     const selector = searchParams.get("selector") || "";
 
+    // highlight=[{selector,label,color}] - color is "red" (defect) or "blue" (selected locator)
+    const COLORS = { red: "#DC2626", blue: "#2563EB" };
+    let highlights = [];
+    try {
+      const raw = JSON.parse(searchParams.get("highlight") || "[]");
+      if (Array.isArray(raw)) {
+        highlights = raw
+          .filter((h) => h && typeof h.selector === "string" && h.selector.length <= 200)
+          .slice(0, 8)
+          .map((h) => ({
+            selector: h.selector,
+            label: String(h.label || "").slice(0, 80),
+            color: COLORS[h.color] || COLORS.red,
+          }));
+      }
+    } catch (e) {}
+
     if (!targetUrl) {
       return new NextResponse("Missing url parameter", { status: 400 });
     }
@@ -19,6 +36,7 @@ export async function GET(req) {
       {
         action,
         selector,
+        highlights,
         waitMs: 900,
       }
     );

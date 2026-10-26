@@ -288,7 +288,8 @@ export async function captureRouteScreenshot(targetUrl, route = "/", options = {
     fullUrl = normalizedBase;
   }
 
-  const cacheKey = `${fullUrl}__${options.action || "view"}__${options.selector || ""}`;
+  const highlights = Array.isArray(options.highlights) ? options.highlights : [];
+  const cacheKey = `${fullUrl}__${options.action || "view"}__${options.selector || ""}__${JSON.stringify(highlights)}`;
 
   // Check cache
   if (screenshotCache.has(cacheKey)) {
@@ -336,6 +337,27 @@ export async function captureRouteScreenshot(targetUrl, route = "/", options = {
       } catch (fillErr) {
         // Non-critical action error
       }
+    }
+
+    // Outline requested elements in the live page (red = defect, blue = selected locator),
+    // scrolling the first one into view so it is inside the captured viewport.
+    let highlighted = 0;
+    for (const [i, h] of highlights.entries()) {
+      try {
+        const loc = page.locator(h.selector).first();
+        if (!(await loc.count())) continue;
+        if (i === 0 || highlighted === 0) await loc.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
+        await loc.evaluate((el, mark) => {
+          el.style.outline = `3px solid ${mark.color}`;
+          el.style.outlineOffset = "3px";
+          const r = el.getBoundingClientRect();
+          const tag = document.createElement("div");
+          tag.textContent = mark.label;
+          tag.style.cssText = `position:absolute;z-index:2147483647;left:${r.left + window.scrollX}px;top:${Math.max(0, r.top + window.scrollY - 26)}px;background:${mark.color};color:#fff;font:600 12px/1.6 system-ui,sans-serif;padding:1px 8px;border-radius:4px;max-width:460px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+          document.body.appendChild(tag);
+        }, h);
+        highlighted++;
+      } catch (e) {}
     }
 
     const buffer = await page.screenshot({
