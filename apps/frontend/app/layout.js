@@ -23,6 +23,12 @@ export default function RootLayout({ children }) {
 
         {/* Main Application Body */}
         <main className="flex-1 flex flex-col">{children}</main>
+
+        {/* Site-wide reminder: findings and suggested fixes are aids, not verdicts. */}
+        <p className="border-t border-[#E5E5E5] bg-white px-4 py-3 text-center text-[11px] text-[#737373]">
+          AI can make mistakes. Please validate each finding and suggested fix yourself, or take a second opinion,
+          before acting on it.
+        </p>
       </body>
     </html>
   );

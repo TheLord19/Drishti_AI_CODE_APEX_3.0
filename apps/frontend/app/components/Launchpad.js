@@ -213,40 +213,17 @@ export default function Launchpad({
               onClick={() => setShowAdvanced(!showAdvanced)}
               aria-expanded={showAdvanced}
               aria-controls="run-options"
-              className="mx-auto flex items-center gap-1 text-xs text-muted hover:text-fg transition-colors"
+              className="mx-auto flex items-center gap-1.5 text-sm font-semibold text-fg underline-offset-4 hover:underline transition-colors"
             >
               <span>{showAdvanced ? "Hide options" : "Show options"}</span>
-              {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              <span className="font-normal text-muted">(test account, safety mode)</span>
+              {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
           </div>
 
           {/* Options: hidden until asked for */}
           {showAdvanced && (
             <div id="run-options" className="border-t border-line bg-[#FAFAF9] p-5 sm:p-6 space-y-6 text-xs">
-              <div>
-                <span className={smallLabel}>Example targets</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {PRESET_TARGETS.map((p) => {
-                    const isSelected = activePreset === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => onPresetSelect(p.id)}
-                        aria-pressed={isSelected}
-                        className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                          isSelected
-                            ? "bg-fg text-white"
-                            : "bg-white text-[#525252] border border-line hover:text-fg"
-                        }`}
-                      >
-                        {p.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
               <div>
                 <label htmlFor="mode-select" className={smallLabel}>
                   Execution safety mode
