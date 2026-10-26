@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle2, ChevronRight, Maximize2 } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, ChevronRight, Maximize2, Wrench, Copy, Check, EyeOff } from "lucide-react";
 
 const sectionLabel = "block text-[11px] font-medium text-muted mb-1.5";
 
@@ -9,6 +10,155 @@ function severityStyle(severity) {
   if (s === "high" || s === "critical") return { dot: "bg-red-500", text: "text-red-700", border: "border-red-200" };
   if (s === "low") return { dot: "bg-zinc-400", text: "text-[#525252]", border: "border-line" };
   return { dot: "bg-amber-500", text: "text-amber-700", border: "border-amber-200" };
+}
+
+const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+
+// Ready-to-paste bug report for GitHub, Jira or Slack.
+function issueText(f, targetUrl) {
+  const fix = f.fix || {};
+  return [
+    `## ${f.title}`,
+    "",
+    `Severity: ${f.severity}${f.hidden ? " (hidden failure)" : ""} | Reproduced: ${f.replay_rate} | Page: ${f.anomaly_location?.screen || "/"} | Site: ${targetUrl}`,
+    "",
+    "### Steps to reproduce",
+    ...(f.trigger_steps || []).map((s, i) => `${i + 1}. ${s}`),
+    "",
+    `Expected: ${f.expected}`,
+    `Actual: ${f.actual}`,
+    `Evidence: ${f.evidence}`,
+    "",
+    "### Suggested fix",
+    fix.summary || "",
+    `Likely cause: ${fix.cause || ""}`,
+    ...(fix.steps || []).map((s) => `- ${s}`),
+    ...(fix.code ? ["", `Example (AI suggestion, ${fix.code_source}):`, "```" + (fix.code_language || ""), fix.code, "```"] : []),
+    "",
+    `Confirm the fix: re-run ${fix.confirm_test || "DRISHTI"}; it should pass.`,
+    "",
+    "Found by DRISHTI AI",
+  ].join("\n");
+}
+
+function CopyButton({ text, label }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigator.clipboard?.writeText(text).then(() => {
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        });
+      }}
+      className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-fg hover:bg-subtle"
+    >
+      {done ? <Check className="w-3 h-3 text-emerald-600" aria-hidden="true" /> : <Copy className="w-3 h-3 text-muted" aria-hidden="true" />}
+      {done ? "Copied" : label}
+    </button>
+  );
+}
+
+export function HiddenBadge() {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700"
+      title="Users rarely report this; it shows up later as lost orders or support tickets."
+    >
+      <EyeOff className="w-3 h-3" aria-hidden="true" />
+      Hidden
+    </span>
+  );
+}
+
+// Green, labelled block: the fix is never conveyed by colour alone.
+function FixBlock({ f, targetUrl }) {
+  const fix = f.fix;
+  if (!fix) return null;
+  return (
+    <div className="px-4 py-4">
+      <div className="rounded-md border border-emerald-200 border-l-4 border-l-emerald-500 bg-emerald-50/60 p-3 space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+            <Wrench className="w-3.5 h-3.5" aria-hidden="true" />
+            Suggested fix
+          </span>
+          <CopyButton text={issueText(f, targetUrl)} label="Copy as issue" />
+        </div>
+        <p className="text-sm font-medium text-fg">{fix.summary}</p>
+        <p className="text-[#404040]">
+          <span className="text-muted">Likely cause: </span>
+          {fix.cause}
+        </p>
+        {fix.steps?.length > 0 && (
+          <ol className="list-decimal space-y-0.5 pl-4 text-[#262626]">
+            {fix.steps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
+        )}
+        {fix.code && (
+          <div>
+            <span className="block text-[11px] text-muted mb-1">
+              Example for this stack · AI suggestion ({fix.code_source}), review before use
+            </span>
+            <pre className="overflow-x-auto rounded-md border border-[#27272A] bg-[#0E1015] p-3 font-mono text-[11px] leading-relaxed text-zinc-200">
+              {fix.code}
+            </pre>
+          </div>
+        )}
+        {fix.confirm_test && (
+          <p className="text-[11px] text-muted">
+            Confirm the fix: re-run <code className="font-mono text-fg">{fix.confirm_test}</code>; it should pass.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Every defect in severity order with its one-line fix: the team's to-do list.
+function FixPlan({ findings, targetUrl }) {
+  const ordered = [...findings].sort((a, b) => (SEVERITY_RANK[a.severity] ?? 2) - (SEVERITY_RANK[b.severity] ?? 2));
+  const planText = [
+    `DRISHTI fix plan for ${targetUrl}`,
+    "",
+    ...ordered.map((f, i) => `${i + 1}. [${f.severity}${f.hidden ? ", hidden" : ""}] ${f.title}\n   Fix: ${f.fix?.summary || "-"}`),
+  ].join("\n");
+  return (
+    <section aria-labelledby="fix-plan-heading" className="rounded-lg border border-emerald-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 px-4 py-3">
+        <h3 id="fix-plan-heading" className="inline-flex items-center gap-1.5 text-sm font-semibold text-fg">
+          <Wrench className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+          Fix plan
+          <span className="font-mono text-xs font-normal text-muted">{ordered.length}</span>
+        </h3>
+        <CopyButton text={planText} label="Copy fix plan" />
+      </div>
+      <ol className="divide-y divide-line">
+        {ordered.map((f, i) => {
+          const sev = severityStyle(f.severity);
+          return (
+            <li key={f.id || i} className="flex items-start gap-3 px-4 py-2.5 text-xs">
+              <span className="w-4 shrink-0 font-mono text-muted">{i + 1}</span>
+              <span className={`mt-1 w-1.5 h-1.5 shrink-0 rounded-full ${sev.dot}`} aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-1.5 text-fg">
+                  {f.title}
+                  {f.hidden && <HiddenBadge />}
+                </span>
+                <span className="mt-0.5 block text-emerald-800">
+                  <span className="font-semibold">Fix:</span> {f.fix?.summary}
+                </span>
+              </span>
+              <span className={`shrink-0 text-[10px] font-medium uppercase ${sev.text}`}>{f.severity}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
 }
 
 export default function DefectsTab({
@@ -39,8 +189,15 @@ export default function DefectsTab({
           Defects
           <span className="font-mono text-sm font-normal text-muted">{findings.length}</span>
         </h2>
-        <p className="text-xs text-muted mt-1">Each defect was replayed in fresh browser contexts. Open a row for evidence.</p>
+        <p className="text-xs text-muted mt-1">
+          Each defect was replayed in fresh browser contexts. Open a row for evidence and its suggested fix.
+          {findings.some((f) => f.hidden) && (
+            <> {findings.filter((f) => f.hidden).length} hidden: users rarely report these, but they cost orders and support time.</>
+          )}
+        </p>
       </div>
+
+      {findings.length > 0 && <FixPlan findings={findings} targetUrl={targetUrl} />}
 
       {findings.length > 0 ? (
         <ul className="rounded-lg border border-line bg-white divide-y divide-line">
@@ -56,6 +213,7 @@ export default function DefectsTab({
                     <span className={`w-2 h-2 shrink-0 rounded-full ${sev.dot}`} aria-hidden="true" />
                     <span className="shrink-0 font-mono text-xs text-muted">{f.id || `BUG-${idx + 1}`}</span>
                     <span className="min-w-0 flex-1 truncate text-sm text-fg">{title}</span>
+                    {f.hidden && <HiddenBadge />}
                     <span className={`hidden sm:inline shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase ${sev.text} ${sev.border}`}>
                       {f.severity || "warning"}
                     </span>
@@ -76,6 +234,8 @@ export default function DefectsTab({
                         <p className="text-[#262626] leading-relaxed">{f.actual}</p>
                       </div>
                     </div>
+
+                    <FixBlock f={f} targetUrl={targetUrl} />
 
                     {f.journey && (
                       <div className="px-4 py-3 text-muted">
@@ -138,23 +298,11 @@ export default function DefectsTab({
                             {defectInfo.isImage ? (
                               <div className="relative w-full">
                                 <img
-                                  src={defectInfo.src}
-                                  alt={`Page capture for ${f.id}`}
+                                  src={f.screenshot_url || `${defectInfo.src}&highlight=${encodeURIComponent(JSON.stringify([{ selector: f.anomaly_location.selector, label: `${f.id}: ${f.title}`, color: "red" }]))}`}
+                                  alt={`Page capture for ${f.id} with the element outlined in red`}
+                                  loading="lazy"
                                   className="w-full h-auto block select-none"
                                 />
-                                <div
-                                  className="absolute rounded border-2 border-red-500 bg-red-500/10 pointer-events-none"
-                                  style={{
-                                    left: `${f.anomaly_location.x ?? 25}%`,
-                                    top: `${f.anomaly_location.y ?? 35}%`,
-                                    width: `${f.anomaly_location.w ?? 50}%`,
-                                    height: `${f.anomaly_location.h ?? 25}%`,
-                                  }}
-                                >
-                                  <span className="absolute -top-5 left-0 rounded bg-fg px-1.5 py-0.5 font-mono text-[10px] text-white whitespace-nowrap">
-                                    {f.id}
-                                  </span>
-                                </div>
                               </div>
                             ) : (
                               <iframe

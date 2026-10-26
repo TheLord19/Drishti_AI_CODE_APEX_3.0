@@ -54,7 +54,14 @@ export default function PytestTab({
                       <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} aria-hidden="true" />
                       {st.label}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-fg">{t.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-fg">
+                      {t.name}
+                      {t.status === "failed" && t.fix_summary && (
+                        <span className="block truncate text-[11px] text-emerald-800">
+                          <span className="font-semibold">Fix:</span> {t.fix_summary}
+                        </span>
+                      )}
+                    </span>
                     <span className="hidden sm:inline font-mono text-[11px] text-muted">{t.id}</span>
                   </summary>
                   <div className="space-y-3 border-t border-line bg-[#FAFAF9] px-4 py-3 text-xs">
@@ -64,6 +71,11 @@ export default function PytestTab({
                       {t.replay && <span>Reproduced <span className="font-mono text-fg">{t.replay}</span></span>}
                       {t.note && <span>{t.note}</span>}
                     </div>
+                    {t.fix_summary && (
+                      <div className="rounded-md border border-emerald-200 border-l-4 border-l-emerald-500 bg-emerald-50/60 px-3 py-2 text-emerald-900">
+                        <span className="font-semibold">Suggested fix:</span> {t.fix_summary} Re-run <code className="font-mono">{t.id}</code> to confirm.
+                      </div>
+                    )}
                     {t.steps?.length > 0 && (
                       <ol className="list-decimal space-y-0.5 pl-4 text-[#525252]">
                         {t.steps.map((s, i) => (

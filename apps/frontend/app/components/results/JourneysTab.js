@@ -62,7 +62,7 @@ export default function JourneysTab({
             {passingJourneysCount}/{dynamicJourneys.length} passed
           </span>
         </h2>
-        <p className="text-xs text-muted mt-1">User journeys the agent planned and ran. Open one for its checks and screenshots.</p>
+        <p className="text-xs text-muted mt-1">What a real visitor goes through, grouped into journeys. Open one for its result and screenshots; per-test steps and code are in the Tests tab.</p>
       </div>
 
       <ul className="rounded-lg border border-line bg-white divide-y divide-line">
@@ -84,6 +84,11 @@ export default function JourneysTab({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm text-fg">{j.title}</span>
                   <span className="block truncate font-mono text-[11px] text-muted">{j.target}</span>
+                  {j.fix && (
+                    <span className="mt-0.5 block truncate text-[11px] text-emerald-800">
+                      <span className="font-semibold">Fix:</span> {j.fix}
+                    </span>
+                  )}
                 </span>
                 <span className="hidden sm:inline shrink-0 text-[11px] text-muted">{j.category}</span>
                 <span className={`shrink-0 text-xs font-medium ${st.text}`}>{st.label}</span>
@@ -94,10 +99,23 @@ export default function JourneysTab({
                 <div id={panelId} className="border-t border-line divide-y divide-line text-xs">
                   {j.details && <p className="px-4 py-3 text-[#525252] leading-relaxed">{j.details}</p>}
 
+                  {j.fixes?.length > 0 && (
+                    <div className="px-4 py-3">
+                      <div className="rounded-md border border-emerald-200 border-l-4 border-l-emerald-500 bg-emerald-50/60 px-3 py-2">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wide text-emerald-800 mb-1">Suggested fixes</span>
+                        <ul className="list-disc space-y-0.5 pl-4 text-emerald-900">
+                          {j.fixes.map((fx, i) => (
+                            <li key={i}>{fx}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
                   {j.assertions?.length > 0 && (
                     <div className="px-4 py-4">
-                      <span className={sectionLabel}>Checks run</span>
-                      <ul className="space-y-1 font-mono text-[11px] text-[#262626]">
+                      <span className={sectionLabel}>Checks in this journey</span>
+                      <ul className="space-y-1 text-[#262626]">
                         {j.assertions.map((ast, i) => (
                           <li key={i}>{ast}</li>
                         ))}

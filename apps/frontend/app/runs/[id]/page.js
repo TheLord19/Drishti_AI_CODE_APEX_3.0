@@ -473,17 +473,55 @@ function RunConsoleContent() {
   };
 
   // Build test journeys dynamically with dedicated SIGN-UP and SIGN-IN test suites
-  // Journeys are the named tests the engine actually ran (probes.js), one row per test.
-  const JOURNEY_STATUS = { failed: "DEFECT DETECTED", passed: "PASSED", skipped: "UNAVAILABLE", warning: "POLICY WARNING" };
-  const dynamicJourneys = namedTests.map((t) => ({
-    id: t.id,
-    title: t.name,
-    category: t.category,
-    target: `Route: ${t.route || "/"}`,
-    status: JOURNEY_STATUS[t.status] || "PASSED",
-    details: t.note || (t.replay ? `Reproduced ${t.replay} in fresh browsers` : ""),
-    assertions: t.steps || [],
-  }));
+  // Journeys are the user's view: the named tests (Tests tab) grouped into the flows a real
+  // visitor goes through, with one overall result per flow. The Tests tab keeps the per-test detail.
+  const JOURNEY_META = {
+    "Page health": { title: "Browse the site", story: "A visitor opens every page the site links to." },
+    Navigation: { title: "Follow links", story: "A visitor clicks the links on each page and expects to land somewhere real." },
+    "Sign-up": { title: "Create an account", story: "A new visitor signs up, makes typing mistakes, and tries an address that is already registered." },
+    "Sign-in": { title: "Sign in", story: "A returning user signs in, sometimes typing their email in capitals, and opens pages behind the sign-in." },
+    Forms: { title: "Fill in forms", story: "A visitor fills in the site's forms, leaves fields empty, or enters a wrong email or quantity." },
+    "Hidden failures": { title: "Things users don't report", story: "Failures users rarely report: odd input, no confirmation, broken background requests. They show up later as lost orders or support tickets." },
+    Hardening: { title: "Security basics", story: "The site's responses are checked for recommended security headers." },
+  };
+  const STATUS_WORD = { failed: "Failed", passed: "Passed", skipped: "Unavailable", warning: "Warning" };
+  const journeyGroups = [];
+  for (const t of namedTests) {
+    let g = journeyGroups.find((x) => x.category === t.category);
+    if (!g) journeyGroups.push((g = { category: t.category, tests: [] }));
+    g.tests.push(t);
+  }
+  const dynamicJourneys = journeyGroups.map((g, i) => {
+    const meta = JOURNEY_META[g.category] || { title: g.category, story: "" };
+    const count = (s) => g.tests.filter((t) => t.status === s).length;
+    const failed = count("failed");
+    const ran = g.tests.length - count("skipped");
+    const status = failed
+      ? "DEFECT DETECTED"
+      : count("warning")
+      ? "POLICY WARNING"
+      : ran === 0
+      ? "UNAVAILABLE"
+      : "PASSED";
+    const outcome = ran === 0
+      ? `Could not be checked: ${g.tests.find((t) => t.note)?.note || "unavailable"}.`
+      : failed
+      ? `${failed} of ${ran} checks failed for this visitor.`
+      : `All ${ran} checks passed.`;
+    const fixes = g.tests.filter((t) => t.status === "failed" && t.fix_summary).map((t) => t.fix_summary);
+    return {
+      id: `J-${String(i + 1).padStart(2, "0")}`,
+      title: meta.title,
+      category: g.category,
+      target: `Route: ${g.tests.find((t) => t.status === "failed")?.route || g.tests[0]?.route || "/"}`,
+      status,
+      details: `${meta.story} ${outcome}`.trim(),
+      assertions: g.tests.map((t) => `${STATUS_WORD[t.status] || "Passed"}: ${t.name}${t.replay ? ` (${t.replay})` : ""}`),
+      fix: fixes.length ? `${fixes[0]}${fixes.length > 1 ? ` (+${fixes.length - 1} more)` : ""}` : null,
+      fixes,
+      hidden: g.category === "Hidden failures",
+    };
+  });
 
   const computedPlaywrightCode = testCode || "# The test file appears here when the run finishes.";
 
@@ -580,6 +618,7 @@ function RunConsoleContent() {
           ========================================================================= */}
       <MultiAgentSwarmModal
         isOpen={shouldShowModal}
+        runId={runId}
         onClose={() => {
           setShowAgentModal(false);
           setModalDismissed(true);
@@ -670,6 +709,7 @@ function RunConsoleContent() {
         {/* Tab 3: Live Browser & Locators */}
         {activeReportTab === "preview" && (
           <LiveBrowserTab
+            findings={findings}
             viewportMode={viewportMode}
             setViewportMode={setViewportMode}
             previewRoute={previewRoute}
