@@ -6,6 +6,7 @@ import { X, Check, ArrowRight } from "lucide-react";
 export default function MultiAgentSwarmModal({
   isOpen,
   onClose,
+  runId,
   targetHostname,
   targetUrl,
   pipeline,
@@ -123,8 +124,15 @@ export default function MultiAgentSwarmModal({
 
             <div className="rounded-md border border-line bg-[#FAFAF9]">
               <div className="flex items-center justify-between border-b border-line px-3 py-1.5 text-[11px] text-muted">
-                <span>Log</span>
-                <span className="font-mono">{events.length} events</span>
+                <span>Log · saved to disk</span>
+                <span className="flex items-center gap-3">
+                  <span className="font-mono">{events.length} events</span>
+                  {runId && (
+                    <a href={`/api/runs/${runId}/logs`} download className="text-fg hover:underline">
+                      Download log
+                    </a>
+                  )}
+                </span>
               </div>
               <div className="max-h-[220px] overflow-y-auto px-3 py-2 space-y-1 font-mono text-[11px]" aria-live="polite">
                 {events.length > 0 ? (
