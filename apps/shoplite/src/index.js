@@ -93,6 +93,48 @@ app.get('/__test/routes', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Bug switchboard — pick which planted bugs are live, without a restart.
+// Operator page for benchmarking only; DRISHTI never reads it.
+// ---------------------------------------------------------------------------
+const BUG_MANIFEST = require('../bugs.manifest.json');
+
+app.get('/__bugs', (req, res) => {
+  const rows = BUG_MANIFEST.map(b => {
+    const id = b.id.toLowerCase();
+    return `<label class="bug"><input type="checkbox" name="bugs" value="${id}" ${hasBug(id) ? 'checked' : ''}>
+      <span><b>${b.id}</b> · ${b.severity} · <code>${b.route}</code><br><span class="muted">Bug: ${b.faulty}<br>Correct: ${b.expected}</span></span></label>`;
+  }).join('');
+  const active = [...ACTIVE_BUGS].map(b => b.toUpperCase()).join(', ') || 'none';
+  res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShopLite · Bug switchboard</title><style>
+body{font:14px system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;color:#171717}
+.bug{display:flex;gap:.75rem;align-items:flex-start;border:1px solid #e5e5e5;border-radius:8px;padding:.75rem;margin:.5rem 0;cursor:pointer}
+.muted{color:#737373;font-size:13px}code{font-size:12px}
+button{background:#171717;color:#fff;border:0;border-radius:6px;padding:.55rem 1rem;font-weight:600;cursor:pointer}
+.link{background:none;color:#171717;text-decoration:underline;padding:0;margin-left:1rem;font-weight:400}
+</style></head><body>
+<h1 style="font-size:1.4rem">Bug switchboard</h1>
+<p class="muted">Tick the bugs to plant on this ShopLite (port ${PORT}), then save. Takes effect immediately. Live now: <b>${active}</b></p>
+<form method="POST" action="/__bugs">${rows}
+<p><button type="submit">Save planted bugs</button>
+<button class="link" type="submit" name="preset" value="none">Turn all off</button>
+<button class="link" type="submit" name="preset" value="all">Turn all on</button></p></form>
+<p class="muted">Then run DRISHTI on <code>http://localhost:${PORT}</code>. Store data is reset on every save.</p>
+</body></html>`);
+});
+
+app.post('/__bugs', (req, res) => {
+  const all = BUG_MANIFEST.map(b => b.id.toLowerCase());
+  let picked = req.body.preset === 'all' ? all : req.body.preset === 'none' ? [] : [].concat(req.body.bugs || []);
+  picked = picked.map(b => String(b).toLowerCase()).filter(b => all.includes(b));
+  ACTIVE_BUGS.clear();
+  picked.forEach(b => ACTIVE_BUGS.add(b));
+  resetStore();
+  Object.keys(sessions).forEach(k => delete sessions[k]);
+  res.redirect('/__bugs');
+});
+
+// ---------------------------------------------------------------------------
 // Pages
 // ---------------------------------------------------------------------------
 
