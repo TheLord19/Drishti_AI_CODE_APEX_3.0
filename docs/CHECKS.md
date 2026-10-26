@@ -16,6 +16,23 @@ in a real browser and picks the checks that apply. Code: `apps/frontend/app/api/
 | S8 Report | Findings with steps, expected, actual and evidence. |
 | S9 Tests | Every check is exported as a named Playwright test (pytest). |
 
+## Run logs
+
+Every run is saved to `drishti/data/runs/<run_id>/` (set `DRISHTI_DATA_DIR` to move it; the folder is git-ignored):
+
+| File | Contents |
+|---|---|
+| `run.json` | Target, mode, final stage and status |
+| `events.jsonl` | Every log line as JSON, tagged with the agent that wrote it, appended as it happens |
+| `log.txt` | The same log, readable |
+| `findings.json`, `tests.json` | Defects and named test results |
+| `model.json`, `telemetry.json` | Pages, buttons and fields found; response metadata |
+| `test_suite.py` | The generated Playwright tests |
+
+Saved runs reload when the server starts, so report pages keep working after a restart. A run cut off by a restart
+is marked `interrupted`. The agent panel on the run page has a **Download log** link (`/api/runs/<run_id>/logs`),
+which returns the log grouped by agent. Passwords are never written; usernames appear masked (`d***@example.com`).
+
 ## Test results
 
 | Result | Meaning |
