@@ -1,0 +1,56 @@
+[
+  {
+    "id": "A1",
+    "title": "Save & Next does not keep the answer",
+    "route": "/exam",
+    "severity": "high",
+    "faulty": "After Save & Next, going back to the previous question shows it unanswered",
+    "expected": "Previous shows the answer that was saved",
+    "detected_by": ["test_step_memory"]
+  },
+  {
+    "id": "A2",
+    "title": "Question text is not visible",
+    "route": "/exam",
+    "severity": "high",
+    "faulty": "Question 3 is rendered in the same colour as the background",
+    "expected": "Every question is readable",
+    "detected_by": ["test_visible_text"]
+  },
+  {
+    "id": "A3",
+    "title": "Code editor does not accept typing",
+    "route": "/exam",
+    "severity": "high",
+    "faulty": "Keystrokes in the code answer box are ignored",
+    "expected": "The candidate can type an answer",
+    "detected_by": ["test_editable_fields"]
+  },
+  {
+    "id": "A4",
+    "title": "Answers lost after a page refresh",
+    "route": "/exam",
+    "severity": "high",
+    "faulty": "Saved answers are not restored when the exam page reloads",
+    "expected": "A refresh restores every saved answer",
+    "detected_by": ["test_refresh_memory"]
+  },
+  {
+    "id": "A6",
+    "title": "Double-click on Submit creates two submissions",
+    "route": "/exam",
+    "severity": "high",
+    "faulty": "The submit button stays active and the server accepts a repeat",
+    "expected": "One click, one submission",
+    "detected_by": ["test_double_submit"]
+  },
+  {
+    "id": "A8",
+    "title": "Answers with quotes or symbols fail to save",
+    "route": "/exam",
+    "severity": "high",
+    "faulty": "Saving an answer containing a quote returns HTTP 500",
+    "expected": "Any text answer is saved",
+    "detected_by": ["test_odd_input", "test_flow_odd_input"]
+  }
+]
